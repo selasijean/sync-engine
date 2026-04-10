@@ -1,0 +1,4279 @@
+00:02 [Music]
+00:07 
+
+00:07 yes yeah therefore yeah hello
+00:12 
+
+00:12 so my subject today is hot let's learn
+00:17 
+
+00:17 with Apple or grandpa well I'm a Henry
+00:21 
+
+00:21 my call is called me doctorate which
+00:24 
+
+00:24 means doctor it's long story and I have
+00:28 
+
+00:28 been developer in the practice instead
+00:30 
+
+00:30 practice was founded my experience with
+00:35 
+
+00:35 the Apollo is started from there I think
+00:38 
+
+00:38 in the summer 2017 and so I have done
+00:42 
+
+00:42 something like the 200 healthy years it
+00:45 
+
+00:45 we did most of the times the projects
+00:48 
+
+00:48 are some sort of earpiece and every time
+00:52 
+
+00:52 made it with the reactor ecosystem in
+00:55 
+
+00:55 the client side and usually there was
+00:58 
+
+00:58 some sort of Postgres database and lots
+01:00 
+
+01:00 of food third party party rest queries
+01:06 
+
+01:06 and the basic stuff nothing too fancy
+01:09 
+
+01:09 but basic bread and butter and for
+01:15 
+
+01:15 because I've done this earpiece there is
+01:18 
+
+01:18 I have don't have so much experience
+01:22 
+
+01:22 with the front-end cashing with Apple
+01:24 
+
+01:24 because in these projects it was quite
+01:27 
+
+01:27 redundant to do it at the Sun but we
+01:30 
+
+01:30 will come back that later
+01:33 
+
+01:33 so how many you actually know what this
+01:38 
+
+01:38 apple RF coil so most of you so this is
+01:43 
+
+01:43 for those poor bastards that don't know
+01:45 
+
+01:45 anything about what I'm trembling here
+01:47 
+
+01:47 what is that [ __ ] and here is the basic
+01:51 
+
+01:51 you argon is that so it's an app API
+01:56 
+
+01:56 like rest but better but nothing like it
+02:01 
+
+02:01 really and what is this other guy Apollo
+02:06 
+
+02:06 we everybody knows that pre God or some
+02:12 
+
+02:12 son of Commander Adama maybe
+02:14 
+
+02:14 moon-landing hoax or is it just a
+02:24 
+
+02:24 framework for craft cool so one could
+02:31 
+
+02:31 say that I didn't find any better word
+02:33 
+
+02:33 but basically it gives you all the bells
+02:35 
+
+02:35 and whistles to work with the graph coil
+02:37 
+
+02:37 in the chaplet environment so to the
+02:42 
+
+02:42 hard part that's that's that's your
+02:44 
+
+02:44 introduction I'm sorry
+02:46 
+
+02:46 nothing more to the point lesson one
+02:54 
+
+02:54 customs colors so in graph coil we have
+02:60 
+
+02:60 a scholars that it provides us and we
+03:02 
+
+03:02 can do our own scholars it does give us
+03:08 
+
+03:08 like a basis color like a string this is
+03:11 
+
+03:11 a piping from the SEMA and we have a
+03:17 
+
+03:17 name and last miracle of our god
+03:19 
+
+03:19 apple of course and if we want to do our
+03:23 
+
+03:23 custom scholars in our server we just do
+03:28 
+
+03:28 their own scholar date and in the Shema
+03:31 
+
+03:31 there is a date and with that also we'd
+03:35 
+
+03:35 have to do in our resolver side
+03:39 
+
+03:39 deserialize and serialized functionality
+03:42 
+
+03:42 it's nothing too fancy you'll find out
+03:45 
+
+03:45 if you're interested lots of examples
+03:47 
+
+03:47 about that but this presentation is not
+03:49 
+
+03:49 about that but basically it works
+03:52 
+
+03:52 wonderfully and it's a fun and games fun
+03:57 
+
+03:57 and games this is the first time the
+04:01 
+
+04:01 client-side problem now that your server
+04:06 
+
+04:06 provides you some sort of there is some
+04:10 
+
+04:10 sort of date object in your server and
+04:12 
+
+04:12 when it digitized it it gives you the
+04:15 
+
+04:15 plain string and your client gets that
+04:19 
+
+04:19 plain string and absolutely knows knows
+04:22 
+
+04:22 nothing how to deal with that they
+04:25 
+
+04:25 imagine you have a date
+04:27 
+
+04:27 and you'll get in the string format and
+04:29 
+
+04:29 now you have this long big object that
+04:34 
+
+04:34 has lots of dates and all sort of data
+04:36 
+
+04:36 and you'd need every time that find what
+04:39 
+
+04:39 sort of a date there is in the string
+04:42 
+
+04:42 form and and converted it's painted as
+04:44 
+
+04:44 the issue is old it I found it this days
+04:49 
+
+04:49 probably live older one but that's
+04:51 
+
+04:51 that's a lot of one of that all this one
+04:53 
+
+04:53 I found the rice issue about that and
+04:56 
+
+04:56 yeah handling this sucks big time this
+04:60 
+
+04:60 is basically everyone that I know has
+05:02 
+
+05:02 bombed up this in this problem in depth
+05:07 
+
+05:07 in the client-side but there is a
+05:12 
+
+05:12 solution sort of and we can use Apple
+05:18 
+
+05:18 link for that and we can basically we
+05:24 
+
+05:24 it's sort of middleware and so we can
+05:27 
+
+05:27 manipulate the daily data that comes in
+05:29 
+
+05:29 before it's served in our client which
+05:34 
+
+05:34 like we do the query and we can here is
+05:37 
+
+05:37 the example we do this or functionally
+05:40 
+
+05:40 the converts color link
+05:41 
+
+05:41 whatever you want there and basically we
+05:46 
+
+05:46 need to do some function that looks up
+05:49 
+
+05:49 the data finds the things that we want
+05:52 
+
+05:52 to deserialize there and then we just DC
+05:56 
+
+05:56 roast and return the same object that's
+05:58 
+
+05:58 more richer format so you put your de
+06:01 
+
+06:01 strings to there to date objects so how
+06:08 
+
+06:08 our client side knows what it should do
+06:13 
+
+06:13 what things it should be 0s and what it
+06:17 
+
+06:17 should leave it we can wrap it up this
+06:22 
+
+06:22 is the solution that we me and my
+06:25 
+
+06:25 colleague just invented like a year ago
+06:29 
+
+06:29 and we had tried it last since I don't
+06:32 
+
+06:32 know if somebody else has comes up this
+06:33 
+
+06:33 but I didn't finally sort of I didn't
+06:37 
+
+06:37 even actually look so much about it but
+06:39 
+
+06:39 I hope that
+06:41 
+
+06:41 but it has found this thing so this is
+06:44 
+
+06:44 the idea we have a date that this object
+06:48 
+
+06:48 and in our serial as functionally we
+06:53 
+
+06:53 just wrap it in the object we have some
+06:56 
+
+06:56 sort of unique string as a type there
+06:59 
+
+06:59 that is like a machine founding we can
+07:02 
+
+07:02 know what type this is by the unique
+07:06 
+
+07:06 name here and then there is our
+07:08 
+
+07:08 serialized data there and in the client
+07:11 
+
+07:11 side we just look about this sort of
+07:14 
+
+07:14 data structure and we digitize it we can
+07:18 
+
+07:18 also of course you can do a lots of a
+07:20 
+
+07:20 different kind of wrappings and it works
+07:23 
+
+07:23 beautifully so if you are really
+07:26 
+
+07:26 interested by this solution you can ask
+07:28 
+
+07:28 me later so it's it's actually so simple
+07:34 
+
+07:34 that there's there's actually nothing
+07:36 
+
+07:36 can go wrong there it's you don't need
+07:41 
+
+07:41 any libraries or anything and but there
+07:45 
+
+07:45 is one problem or thing that you need to
+07:48 
+
+07:48 know it does it just do it eases you
+07:52 
+
+07:52 when the data comes from server to
+07:54 
+
+07:54 client so you it provides your not your
+07:58 
+
+07:58 dates as dates objects and whatever you
+08:00 
+
+08:00 want there but it doesn't do the client
+08:03 
+
+08:03 the server side in this example this is
+08:07 
+
+08:07 no not a big problem for us because
+08:11 
+
+08:11 usually your domain objects are
+08:14 
+
+08:14 different little bit different than the
+08:17 
+
+08:17 object that you do your mutations but
+08:20 
+
+08:20 you put you in the server so you need to
+08:23 
+
+08:23 do some sort of conversion anyway so in
+08:26 
+
+08:26 those conversions you couldn't use just
+08:28 
+
+08:28 that that to scholar or or some sort of
+08:31 
+
+08:31 conversion functionally there's two and
+08:34 
+
+08:34 as I said it's it hasn't been a big
+08:37 
+
+08:37 issue the biggest issue is that you want
+08:40 
+
+08:40 to have your speed dates as dates when
+08:43 
+
+08:43 you are using the data in your client
+08:47 
+
+08:47 one of the knurled is because the
+08:49 
+
+08:49 strapping it's more makes your raw
+08:53 
+
+08:53 response data more variables by
+08:55 
+
+08:55 again I haven't found it a big issue
+09:00 
+
+09:00 then then there is what the hell what
+09:09 
+
+09:09 okay then there is this other solution
+09:13 
+
+09:13 that I came up from found a couple of
+09:17 
+
+09:17 months ago when I was looking for this
+09:20 
+
+09:20 and there is actually library that do
+09:24 
+
+09:24 similar thing with the like link it has
+09:28 
+
+09:28 similar principle of wrapping instead
+09:30 
+
+09:30 you've used the server-side schema so
+09:33 
+
+09:33 basically you need to expose your Shaima
+09:35 
+
+09:35 and it kind of fetches your schema and
+09:41 
+
+09:41 uses a similar principle that you need
+09:43 
+
+09:43 to do your DC or less functionally the
+09:45 
+
+09:45 client in the link also and you also
+09:48 
+
+09:48 need to put your serialize function in
+09:51 
+
+09:51 there because these do also the client
+09:53 
+
+09:53 the server automatically I have actually
+09:57 
+
+09:57 not experienced to use this library I'm
+09:60 
+
+09:60 looking forward it I have a little
+10:05 
+
+10:05 slight reservation about it but I'm
+10:08 
+
+10:08 still I suggest that everybody has warm
+10:12 
+
+10:12 up this problem try it out yourself and
+10:15 
+
+10:15 make your own conclusions but there is a
+10:19 
+
+10:19 solution another problem sort of however
+10:22 
+
+10:22 there's a disclaimer then it's a caching
+10:25 
+
+10:25 that I mentioned previously so it may
+10:31 
+
+10:31 have side effects there is not proved
+10:35 
+
+10:35 but there might be because as far as I
+10:37 
+
+10:37 know the caching comes after you do this
+10:40 
+
+10:40 your magic there and I don't know how it
+10:43 
+
+10:43 works with the objects that are more
+10:47 
+
+10:47 complex like a date-date
+10:48 
+
+10:48 objects or something if you are not
+10:50 
+
+10:51 using kasia like i have done you know
+10:53 
+
+10:53 some of projects seen and now one year
+10:56 
+
+10:56 there is no absolutely no problem it
+10:59 
+
+10:59 works beautifully and we need to also
+11:02 
+
+11:02 think about that if you if we have a
+11:05 
+
+11:05 some sort of
+11:07 
+
+11:07 ecosystem that has different kind of
+11:09 
+
+11:09 clients and not just a Apollo client
+11:12 
+
+11:12 there's some sort of more obscure one
+11:15 
+
+11:15 for us it might not have as flexible way
+11:21 
+
+11:21 to deal with this this data and some I
+11:24 
+
+11:24 found somebody that yeah the problem in
+11:27 
+
+11:27 the custom scholars with those clients
+11:29 
+
+11:29 maybe even the custom scholars may be
+11:32 
+
+11:32 problematic but again there's just
+11:36 
+
+11:36 that's the good to know information
+11:42 
+
+11:42 that's about that then there is the
+11:45 
+
+11:45 lesson true and I definitely hope that
+11:48 
+
+11:48 this is for most of you this is not to
+11:54 
+
+11:54 new information first thing that is the
+11:58 
+
+11:58 real question is what is an error when
+12:01 
+
+12:01 we got in from the server what is
+12:03 
+
+12:03 actually an error because if we come
+12:06 
+
+12:06 from the rest world we get our 200 and
+12:10 
+
+12:10 everything else is some sort of error or
+12:12 
+
+12:12 not not a result that we are really
+12:16 
+
+12:16 expecting or something like that if we
+12:19 
+
+12:19 think about some sort of a internal
+12:21 
+
+12:21 server error that's definitely the error
+12:24 
+
+12:24 we can it's it's something that we can't
+12:27 
+
+12:27 foresee but something like resource not
+12:31 
+
+12:31 found token expired or maybe if resource
+12:35 
+
+12:35 is deleted I don't think they are error
+12:39 
+
+12:39 they are just alternative results they
+12:43 
+
+12:43 are not that one that in the main flow
+12:45 
+
+12:45 but they are part of the flow they are
+12:48 
+
+12:48 you should think about it
+12:51 
+
+12:51 in your client so equal rights for the
+12:57 
+
+12:57 outputs equal treatment so if we are
+13:01 
+
+13:01 expecting that something is some result
+13:04 
+
+13:04 is expected then we should read it in
+13:08 
+
+13:08 the client and if it's clear treated in
+13:11 
+
+13:11 client we should return it from our
+13:14 
+
+13:14 server not as an error but as result
+13:19 
+
+13:19 so next there is this solution and it's
+13:25 
+
+13:25 unions and it's elegant solution for
+13:29 
+
+13:29 then if we need to have a multiple
+13:33 
+
+13:33 results and here is a one of the idea
+13:39 
+
+13:39 let's have idea we have this God mortal
+13:43 
+
+13:43 man that is trying to ask in the godhood
+13:45 
+
+13:45 he has a 50/50 percent if is accept that
+13:48 
+
+13:48 as God or the mortal is just too weak so
+13:51 
+
+13:51 this is the big beefy bother there we
+13:55 
+
+13:55 have a thesis our output
+13:57 
+
+13:57 it's Union either the poor bastard is
+14:01 
+
+14:01 accepted as godhood or the mortal is
+14:04 
+
+14:04 just too weak and both of the case the
+14:07 
+
+14:07 return data here it's different so we
+14:10 
+
+14:10 can return on different kind of data
+14:12 
+
+14:12 they are both equally good outcomes and
+14:18 
+
+14:18 these why is that if you think about
+14:20 
+
+14:20 from the rest world it kind of handles
+14:23 
+
+14:23 not so elegantly these kind of things
+14:26 
+
+14:26 but we should think differently when we
+14:29 
+
+14:29 are doing with craf cool so the next
+14:35 
+
+14:35 good thing is input onions or actually
+14:38 
+
+14:38 no indiproton yes it's dairy building in
+14:41 
+
+14:41 this ecosystem well you can do it when
+14:47 
+
+14:47 you are getting the data in the unions
+14:49 
+
+14:49 you can put them there
+14:50 
+
+14:50 let's of an example we have a cars and
+14:53 
+
+14:53 motorcycles they are both vehicles and
+14:55 
+
+14:55 we are trying to put a vehicle to the
+14:58 
+
+14:58 server we can't do that that that that
+15:01 
+
+15:01 are typing accept either one or another
+15:06 
+
+15:06 we need to do either they have both own
+15:09 
+
+15:09 endpoints or we do it in our thing our
+15:13 
+
+15:13 data that our input object has
+15:16 
+
+15:16 motorcycle that is baby type and the car
+15:19 
+
+15:19 that is maybe type and we need to do we
+15:23 
+
+15:23 can do the like one or another solution
+15:26 
+
+15:26 in our schema and it's an old old issue
+15:31 
+
+15:31 and it's not actually the up
+15:33 
+
+15:33 problem here it's a graphical aspect
+15:35 
+
+15:35 problem and yeah the good thing is that
+15:41 
+
+15:41 there's again lots of activity about
+15:44 
+
+15:44 this issue since November and I'm really
+15:49 
+
+15:49 looking forward this there is a this
+15:51 
+
+15:51 record for Commons documentation right
+15:55 
+
+15:55 there and yep if you're interesting
+15:59 
+
+15:59 watch this thing over there it's quite
+16:03 
+
+16:03 easy to find just type in petitions and
+16:05 
+
+16:05 if there is so much crying about this
+16:08 
+
+16:08 out you should be fine and but really
+16:12 
+
+16:12 this is the one thing that has bite my
+16:17 
+
+16:17 ass couple of times because while we
+16:20 
+
+16:20 think that the Apple graphical solves
+16:23 
+
+16:23 our problems and sometimes you can't
+16:26 
+
+16:26 just do your schema in the elegant way
+16:30 
+
+16:30 because we don't have the input unions
+16:34 
+
+16:34 so last learning the limitation of the
+16:39 
+
+16:39 shaman
+16:39 
+
+16:39 I love Gemma and I hate it same time it
+16:44 
+
+16:44 is great tool for what it is and it's
+16:49 
+
+16:49 great that we have it but it's not
+16:52 
+
+16:52 completed it's not perfect you can do
+16:56 
+
+16:56 with the schema your - it does some of
+16:59 
+
+16:59 your documentation needs and your
+17:02 
+
+17:02 validation means but it's maybe not
+17:05 
+
+17:05 flexible enough so as we can see this is
+17:10 
+
+17:10 maybe a bit redundant so you don't know
+17:13 
+
+17:13 schema is the more pastors here that in
+17:16 
+
+17:16 its middle why there that that basically
+17:20 
+
+17:20 blocks or allows everything your data to
+17:24 
+
+17:24 flow so let's have this idea that we are
+17:31 
+
+17:31 doing the mutation we have some data
+17:33 
+
+17:33 that we are trying to input we are God
+17:36 
+
+17:36 there is we are requiring in our schema
+17:40 
+
+17:40 that there is a string there stream then
+17:42 
+
+17:42 it has to have a name that is string and
+17:45 
+
+17:45 we are putting
+17:47 
+
+17:47 has to know that's a problem we got when
+17:52 
+
+17:52 this is the error object that we get
+17:55 
+
+17:55 there it basically all of vomits
+17:58 
+
+17:58 everything there and this is one of the
+18:01 
+
+18:01 part that the crop core specification
+18:03 
+
+18:03 come in it basically doesn't say
+18:06 
+
+18:06 anything about the errors this is much
+18:08 
+
+18:08 more than the specification says and I
+18:12 
+
+18:12 don't know think it's so elegant oh this
+18:16 
+
+18:16 is like a pulp garbage that you need to
+18:18 
+
+18:18 pick and look look after what you find
+18:21 
+
+18:21 there you can do some your own additions
+18:25 
+
+18:25 here but really we just talked about
+18:32 
+
+18:32 unions what if I want to have some sort
+18:36 
+
+18:36 of like classical server-side validation
+18:40 
+
+18:40 that returns me some sort of my custom
+18:44 
+
+18:44 output that is not sort of error object
+18:47 
+
+18:47 or something it's just the other type of
+18:50 
+
+18:50 output for example if I have a some sort
+18:54 
+
+18:54 of customs color that is a validation
+18:56 
+
+18:56 and like your personal identity code or
+18:60 
+
+18:60 something like that and we want to use
+19:03 
+
+19:03 it on the client side at this moment
+19:07 
+
+19:07 usually you just get that error object
+19:09 
+
+19:09 and you kind of need to deal with that
+19:12 
+
+19:12 so what we if we really want to do it
+19:17 
+
+19:17 yep it's not that simple I really try to
+19:23 
+
+19:23 find a solution from the internet I
+19:26 
+
+19:26 spend over two days to find if somebody
+19:30 
+
+19:30 has bombed this but I kind of find a
+19:33 
+
+19:33 radio silence except of this quote about
+19:36 
+
+19:36 the server-side validation and that's
+19:41 
+
+19:41 definitely true that's I'm totally this
+19:45 
+
+19:45 is well how we should do it but our
+19:48 
+
+19:48 moral is not optional maybe I I need to
+19:52 
+
+19:52 do it this there is no help for me so
+19:58 
+
+19:58 sometimes the best way is not an option
+20:00 
+
+20:00 I have that idea it's not the trade but
+20:06 
+
+20:06 it was an idea I when I bombed this I I
+20:11 
+
+20:11 just couldn't drop this issue I it's
+20:13 
+
+20:13 something again I think that maybe if we
+20:18 
+
+20:18 can manipulate the things here this is
+20:22 
+
+20:22 the basic flow of the error or sort of
+20:25 
+
+20:25 don't crucified me so we have some data
+20:28 
+
+20:28 it comes to our schema and there is a
+20:31 
+
+20:31 except that like we can think about that
+20:34 
+
+20:34 string that we have there previously we
+20:38 
+
+20:38 it will be this own built-in resolver
+20:41 
+
+20:41 but you can think is also like this can
+20:43 
+
+20:44 be our custom custom scholar resolver
+20:47 
+
+20:47 and then the validation fails there and
+20:51 
+
+20:51 usually we just throw an exception an
+20:53 
+
+20:53 exception is served as error we have
+20:56 
+
+20:56 control different kind of exceptions but
+20:59 
+
+20:59 they are always served as an error but
+21:02 
+
+21:02 basically we don't maybe have to do that
+21:05 
+
+21:05 we can also when we get this error we
+21:10 
+
+21:10 can just wrap it and send is that some
+21:13 
+
+21:13 like we can put it in our own error
+21:17 
+
+21:17 wrapping and say and this can be our
+21:25 
+
+21:25 query or mutation resolver whatever and
+21:28 
+
+21:28 in here we try to analyze if in our in
+21:32 
+
+21:32 our data is that sort of wrap prep
+21:36 
+
+21:36 object is found and if it's found we can
+21:40 
+
+21:40 then do our own logic and say return our
+21:44 
+
+21:44 custom response that can be in the you
+21:49 
+
+21:49 in the Union and I try this thing it
+21:55 
+
+21:55 works yeah but with Kate great power
+22:00 
+
+22:00 comes great responsibility
+22:02 
+
+22:02 that while it it's not elegant it works
+22:06 
+
+22:06 what should we do it because I find it's
+22:09 
+
+22:09 a little bit hack it's actually
+22:12 
+
+22:12 lot of hack probably and I didn't find
+22:14 
+
+22:14 any any good because I didn't find any
+22:17 
+
+22:17 mention about this I don't know I hope
+22:20 
+
+22:20 that some of you know and if we nobody
+22:23 
+
+22:23 knows then maybe something should happen
+22:26 
+
+22:26 to you with this thing because I want my
+22:29 
+
+22:29 responses as time I don't want to have
+22:32 
+
+22:32 some weird error object that I need to
+22:35 
+
+22:35 look at what what's there if I want my
+22:39 
+
+22:39 responses how in the sort of way I want
+22:43 
+
+22:43 to have the ability to make the system
+22:46 
+
+22:46 to serve those things and yeah that's
+22:52 
+
+22:52 that's basically it's a situation where
+22:55 
+
+22:55 I am this thing so I don't know if
+22:59 
+
+22:59 somebody has you have actually bumped
+23:01 
+
+23:01 this problem but I don't actually have
+23:04 
+
+23:04 anything more to say about it or
+23:06 
+
+23:06 anything any other things I'm happy to
+23:09 
+
+23:09 talk with these things and we can have
+23:13 
+
+23:13 some sort of questions here and and
+23:16 
+
+23:16 after this also this situation so you
+23:18 
+
+23:18 can just grab my arm and we can talk
+23:20 
+
+23:20 about these issues and there's lots of
+23:23 
+
+23:23 other issues also but I didn't want to
+23:26 
+
+23:26 put them in the paper here so thanks
+23:29 
+
+23:29 everybody and we can anybody have
+23:33 
+
+23:33 anything - any questions or anything yes
+23:46 
+
+23:46 no I haven't looked for the writer so I
+23:50 
+
+23:50 haven't do that this emulation at all so
+23:54 
+
+23:54 no yes limitations have you encountered
+24:01 
+
+24:01 issues with the generic generous yeah I
+24:05 
+
+24:05 mean the typescript or for example
+24:10 
+
+24:10 getting as far as I checked it wasn't
+24:13 
+
+24:13 possible but it is something that for
+24:16 
+
+24:16 example we would
+24:17 
+
+24:17 to do and that's why gruff kale was out
+24:19 
+
+24:19 of the question
+24:20 
+
+24:20 couldn't do like okay for example table
+24:24 
+
+24:24 with the different types of road you can
+24:27 
+
+24:27 like have object as table you need to
+24:30 
+
+24:30 specify it at all times of course in the
+24:33 
+
+24:33 graph here all you need to do it at all
+24:34 
+
+24:34 times
+24:35 
+
+24:35 there is no this encapsulation oh okay
+24:39 
+
+24:39 no I don't have
+24:41 
+
+24:41 I haven't find that thing because most
+24:43 
+
+24:43 of the times I have used in the with the
+24:46 
+
+24:46 typescript and everything it has been
+24:49 
+
+24:49 strong the type and in that situation I
+24:52 
+
+24:52 haven't I haven't faced a problem at all
+24:55 
+
+24:55 so that's really interesting and we can
+24:58 
+
+24:58 talk about it that later anything else
+25:04 
+
+25:04 dead sounds good so I don't think that I
+25:10 
+
+25:10 needed to mention there's is next week's
+25:13 
+
+25:13 Friday not next Friday and it is what is
+25:20 
+
+25:20 a broody the Valentine's Day even is it
+25:27 
+
+25:27 the next Friday or next week's Friday
+25:31 
+
+25:31 14th yes sorry not the next 14 so
+25:34 
+
+25:34 there's an evil here no dad that's all
+25:38 
+
+25:38 so I I'm going
+25:41 
+
+25:42 I have probably have to keep the same
+26:02 
+
+26:02 presentation then okay thanks everybody
+26:16 
+
+26:16 [Applause]
+26:33 
+
+26:33 I'm trying to go meet my father it's not
+26:36 
+
+26:36 that fast I have to do it I have to go
+26:57 
+
+26:57 [Music]
+27:40 
+
+27:40 [Music]
+28:09 
+
+28:09 [Music]
+28:31 
+
+28:31 [Music]
+29:48 
+
+29:48 [Music]
+30:06 
+
+30:06 [Music]
+30:15 
+
+30:15 [Music]
+30:54 
+
+30:54 [Music]
+31:09 
+
+31:09 [Music]
+31:39 
+
+31:39 [Music]
+31:55 
+
+31:55 [Music]
+32:26 
+
+32:26 [Music]
+32:34 
+
+32:34 [Music]
+33:11 
+
+33:11 [Music]
+33:19 
+
+33:19 [Music]
+33:39 
+
+33:39 [Music]
+35:58 
+
+35:58 [Music]
+36:03 
+
+36:03 [Music]
+36:15 
+
+36:15 all right thanks so much thanks for
+36:20 
+
+36:20 having me I'm Tomas I'm gonna talk about
+36:23 
+
+36:23 real something today and before I jump
+36:26 
+
+36:26 into why I want to sort of give you an
+36:28 
+
+36:28 idea about real time sink I want to give
+36:30 
+
+36:30 you sort of a quick intro on what I've
+36:31 
+
+36:31 been doing in my past so let me know
+36:33 
+
+36:33 who's giving this presentation so I used
+36:36 
+
+36:36 to have a htc in Finland back in the day
+36:38 
+
+36:38 like that board doing the same problem
+36:40 
+
+36:40 all over again for just different
+36:42 
+
+36:42 clients and I went into doing startups
+36:45 
+
+36:45 I've brought me to China like eight
+36:47 
+
+36:47 years ago
+36:48 
+
+36:48 perfect for a year at a gaming company
+36:50 
+
+36:50 where did my first stint engine as you
+36:53 
+
+36:53 might imagine like multiplayer games
+36:55 
+
+36:55 need some sort of you know engine to
+36:57 
+
+36:57 synchronize game state between their
+36:59 
+
+36:59 different clients so I built a note
+37:01 
+
+37:01 server and we had unity clients and a
+37:03 
+
+37:03 flash clients back in the day after that
+37:06 
+
+37:06 I moved over to San Francisco I joined
+37:08 
+
+37:08 Groupon and I wasn't in the coupon like
+37:11 
+
+37:11 you might know the city deal back in
+37:13 
+
+37:13 Europe but it was you know Groupon was
+37:15 
+
+37:15 the parent company I wasn't in the
+37:17 
+
+37:17 coupon business I did point-of-sale
+37:18 
+
+37:18 applications so for high-end restaurants
+37:20 
+
+37:20 usually have multiple iPads that take
+37:23 
+
+37:23 orders send out items to the kitchen to
+37:27 
+
+37:27 prep and all of these iPads need to deal
+37:30 
+
+37:30 it to be in sync so I built my second
+37:32 
+
+37:32 sync engine for goop on and we had a
+37:35 
+
+37:35 swift client or sorry object see clients
+37:38 
+
+37:38 and a note backend back then two years
+37:41 
+
+37:41 later after I got my green card in the
+37:43 
+
+37:43 u.s. I was able to freely select the lab
+37:45 
+
+37:45 where I actually wants it to work at so
+37:47 
+
+37:47 John Lieber we're spend of the past five
+37:49 
+
+37:49 years and as it happened I sink engine
+37:54 
+
+37:54 out for them it was called jet stream
+37:57 
+
+37:57 it's actually open sourced it's not
+37:58 
+
+37:58 being maintained hasn't been in five
+38:00 
+
+38:00 years but I think it's still out there
+38:02 
+
+38:02 if you wanna have a look we had a
+38:04 
+
+38:04 SmithKline the java client a javascript
+38:06 
+
+38:06 client and i think a node or go back end
+38:08 
+
+38:08 it never got you know released in the
+38:11 
+
+38:11 main application because of all kinds of
+38:14 
+
+38:14 you know things the company was growing
+38:15 
+
+38:15 too quickly in order to change the
+38:17 
+
+38:17 underlying infrastructure but
+38:19 
+
+38:19 was still silica try and a year ago I
+38:22 
+
+38:22 co-founded linner with some other other
+38:25 
+
+38:25 friends from from San Francisco and you
+38:27 
+
+38:27 might guess it we have a sink engine
+38:29 
+
+38:30 running the entire application if you
+38:32 
+
+38:32 don't know what linner is it's
+38:33 
+
+38:33 essentially an issue tracking service
+38:35 
+
+38:35 meant for software companies so if
+38:38 
+
+38:38 you're a product company that builds
+38:39 
+
+38:39 some you know built spills a product you
+38:44 
+
+38:44 know check out linear it's pretty
+38:45 
+
+38:45 awesome
+38:48 
+
+38:48 why why am i talking to you about
+38:50 
+
+38:50 real-time sync because it's not really
+38:52 
+
+38:52 that many of you will ever sort of you
+38:55 
+
+38:55 know need to have an application do
+38:58 
+
+38:58 real-time sync yet if you build you know
+39:01 
+
+39:01 tools for for the current market markets
+39:04 
+
+39:04 you might see you know companies like
+39:06 
+
+39:06 slack or notion or figma or front
+39:12 
+
+39:12 essentially you know use real-time
+39:15 
+
+39:15 synchronization you know pretty heavily
+39:17 
+
+39:17 and it is sort of become the norm if if
+39:19 
+
+39:19 you if you you know make a new product
+39:21 
+
+39:21 you know you you your users really
+39:23 
+
+39:23 expect that every everything that you do
+39:26 
+
+39:27 is real-time and everything that you do
+39:29 
+
+39:29 is is multiplayer so that essentially
+39:31 
+
+39:31 you can have hundreds of users on the
+39:33 
+
+39:33 same instance and all those changes you
+39:36 
+
+39:36 know are reflected in in real-time now
+39:39 
+
+39:39 still if you don't build sort of any any
+39:42 
+
+39:42 tooling if you build websites um with
+39:44 
+
+39:44 react or or whatnot it's still sort of a
+39:46 
+
+39:46 it's a good idea to sort of dive into
+39:49 
+
+39:49 you know what it means to build up a
+39:51 
+
+39:51 real-time sync engine because there
+39:53 
+
+39:53 might be some learnings that they could
+39:54 
+
+39:54 you know take away from it
+39:56 
+
+39:56 you know good engineers once you sort of
+39:58 
+
+39:58 broaden their skill set as much as
+40:00 
+
+40:00 possible in order to sort of apply
+40:02 
+
+40:02 information from one domain to another
+40:04 
+
+40:04 and maybe there's something in this talk
+40:06 
+
+40:06 that you know will pique your interest
+40:08 
+
+40:08 or make you want to try things out
+40:10 
+
+40:10 yourself or are beneficial to you going
+40:15 
+
+40:15 going forward so I'm gonna give a pretty
+40:18 
+
+40:18 broad overview of what it means to do
+40:21 
+
+40:21 real-time stick and before I jump into
+40:23 
+
+40:23 the slides I'm gonna do a quick demo of
+40:27 
+
+40:27 what I mean by real-time Seng and
+40:28 
+
+40:28 obviously I'm gonna use my my own tool
+40:29 
+
+40:29 that I'm that I'm currently building
+40:31 
+
+40:31 so here we have an electron application
+40:33 
+
+40:33 and just a browser sitting sorry the
+40:37 
+
+40:37 font size is very small but you don't
+40:38 
+
+40:38 really need to see what's what's on the
+40:40 
+
+40:40 list and so they're two distinct
+40:43 
+
+40:43 application and they're connected via
+40:45 
+
+40:45 this real time synchronization no matter
+40:47 
+
+40:47 how many people would be you know
+40:48 
+
+40:48 jumping in here
+40:49 
+
+40:49 everybody would connect to the same
+40:51 
+
+40:51 instance and everything would update in
+40:52 
+
+40:52 real time so for example I'm looking at
+40:55 
+
+40:55 the same view over here so I could take
+40:57 
+
+40:57 for example this one let me focus
+41:03 
+
+41:03 for example this implements missing
+41:06 
+
+41:06 relations action issue how that is
+41:08 
+
+41:08 currently assigned to me and we've got a
+41:09 
+
+41:09 keyboard shortcut I which understands it
+41:12 
+
+41:12 from me so you see that the person on
+41:14 
+
+41:14 the right-hand side essentially just
+41:15 
+
+41:15 being removed and you can see those
+41:17 
+
+41:17 changes being reflected on the on the
+41:19 
+
+41:19 browser at the same time obviously with
+41:21 
+
+41:21 a bit of lag it goes to the US where the
+41:23 
+
+41:23 servers are and it comes back via socket
+41:25 
+
+41:25 connections but it's still sort of sub
+41:26 
+
+41:26 second-level connectivity and it goes
+41:31 
+
+41:31 deeper than this because essentially
+41:33 
+
+41:33 every single piece of data in the
+41:34 
+
+41:34 application is real-time sent there is
+41:36 
+
+41:36 no other data and then real-time sync
+41:38 
+
+41:38 data and there there's some applications
+41:41 
+
+41:41 or some implications in in here that you
+41:43 
+
+41:43 might think are heart to heart to
+41:46 
+
+41:46 program because if you had to do that
+41:48 
+
+41:48 sort of on a case-by-case basis you
+41:50 
+
+41:50 would probably not do it you would sort
+41:53 
+
+41:53 of you know skip that update because it
+41:54 
+
+41:54 doesn't really makes big sense too much
+41:56 
+
+41:56 to give you an example if I jump over in
+41:60 
+
+41:60 my application over here to all cycles
+42:03 
+
+42:03 so we get a view of all the cycles and
+42:04 
+
+42:04 essentially a burn up burn up charge of
+42:06 
+
+42:06 how we're completing the cycle we're
+42:08 
+
+42:08 actually doing pretty badly only 32
+42:10 
+
+42:10 percent progress and now if you know I
+42:14 
+
+42:14 go on the right-hand side I have all the
+42:16 
+
+42:16 issues for this cycle so if I change any
+42:17 
+
+42:17 of the estimates obviously the graph
+42:19 
+
+42:19 should update in real-time as well so
+42:22 
+
+42:22 let's for example take and come you that
+42:24 
+
+42:24 I completed right here and check the
+42:26 
+
+42:26 estimate and put it to 16 points so on
+42:29 
+
+42:29 the right hand side in real time half a
+42:31 
+
+42:31 second later the graph updates and it
+42:33 
+
+42:33 just reflects the new state of things
+42:36 
+
+42:36 let me move that back to what it was 1
+42:39 
+
+42:39 and the graph automatically animates and
+42:41 
+
+42:41 updates and literally every single piece
+42:44 
+
+42:44 of data in here
+42:45 
+
+42:45 just updates on the fly and how much
+42:50 
+
+42:50 engineering then goes into this and I
+42:52 
+
+42:52 can say there is absolutely zero
+42:54 
+
+42:54 engineering in making this happening
+42:56 
+
+42:56 happen once you have your sink engine in
+42:58 
+
+42:58 place it doesn't matter where the data
+43:00 
+
+43:00 comes comes from and you don't you don't
+43:02 
+
+43:02 need to think about it
+43:03 
+
+43:03 it happens all in real time and it
+43:05 
+
+43:05 happens automatically so if I create any
+43:07 
+
+43:07 functional eat your feature review that
+43:09 
+
+43:09 uses data and that data updates the view
+43:12 
+
+43:12 gets rear-ended so once we put in the
+43:15 
+
+43:15 effort and putting that synchronization
+43:16 
+
+43:16 engine in our task of you know developed
+43:19 
+
+43:19 in this application actually became a
+43:20 
+
+43:20 lot easier and a lot faster we don't
+43:23 
+
+43:23 have to make rest calls we don't have to
+43:24 
+
+43:24 make graphical calls we modify the data
+43:27 
+
+43:27 we save it and everything always updates
+43:30 
+
+43:30 so let's dive in and see what it means
+43:33 
+
+43:33 to build some such a thing so here it is
+43:41 
+
+43:41 and by now you're probably grabbing more
+43:45 
+
+43:45 beer and being like what the hell am I
+43:46 
+
+43:46 doing here like why do I want to see
+43:48 
+
+43:48 this but this is the entire picture so
+43:50 
+
+43:50 in engineering you obviously can sort of
+43:53 
+
+43:53 you know put rails between how many
+43:55 
+
+43:55 different objects if the problem is too
+43:59 
+
+43:59 complicated you essentially just build
+44:03 
+
+44:03 boundaries between your components you
+44:04 
+
+44:04 have to figure out one piece at each
+44:06 
+
+44:06 time and then the whole thing should
+44:09 
+
+44:09 work as well so forget about this for a
+44:11 
+
+44:11 while and let's start with the easy part
+44:13 
+
+44:13 your view in this example what we sort
+44:16 
+
+44:16 of want to do is create a simple view of
+44:18 
+
+44:18 an issue tracker that has our team name
+44:21 
+
+44:21 upfront it should say how many issues we
+44:24 
+
+44:24 have it should then this place display
+44:27 
+
+44:27 those issues display the assignee of
+44:29 
+
+44:29 those issues obviously the name of the
+44:31 
+
+44:31 issue should be there as well and then
+44:33 
+
+44:33 we should get an overview of the team
+44:35 
+
+44:35 members of this team so we've got a team
+44:37 
+
+44:37 view with issues and then the team
+44:39 
+
+44:39 members so how would you do this if you
+44:41 
+
+44:41 you know build AI react app obviously
+44:44 
+
+44:44 you have some sort of object graph some
+44:47 
+
+44:47 sort of data structure that gets passed
+44:49 
+
+44:49 into your view simple stuff so
+44:52 
+
+44:52 essentially your outer component would
+44:53 
+
+44:53 essentially receive a team that team
+44:55 
+
+44:55 would have properties in this case we
+44:57 
+
+44:57 have
+44:58 
+
+44:58 my cursor is invisible but you have a
+45:01 
+
+45:01 team has issues and it has users those
+45:03 
+
+45:03 are collections that can contain you
+45:05 
+
+45:05 know zero or more elements of the
+45:08 
+
+45:08 specific type then an issue has a
+45:11 
+
+45:11 potential assignment it could be nil as
+45:13 
+
+45:13 well and here we have you know a second
+45:15 
+
+45:15 issue with an assignee and they've got
+45:18 
+
+45:18 the users lists and a user again has a
+45:20 
+
+45:20 collection of issues so if issue is
+45:22 
+
+45:22 assigned to a user the user will also
+45:25 
+
+45:25 reflect vaishu's that the user has so
+45:29 
+
+45:29 according to this picture this is
+45:31 
+
+45:31 essentially the object graph that we
+45:32 
+
+45:32 have now I would have really liked to
+45:36 
+
+45:36 listen to Alex's talk because he would
+45:38 
+
+45:38 have been essentially you know talking
+45:40 
+
+45:40 about this how to manage States in an
+45:42 
+
+45:42 application but what we do is we use
+45:45 
+
+45:45 mobic observables on the object graph
+45:47 
+
+45:47 you could use whatever you like it does
+45:49 
+
+45:49 it really doesn't matter you could pass
+45:51 
+
+45:51 in whenever the data changes the entire
+45:52 
+
+45:52 data object if it was Jason into the
+45:55 
+
+45:55 view and the B would get we rendered who
+45:58 
+
+45:58 knows what mob X is and who has used
+45:60 
+
+45:60 marks before a few okay so in essence
+46:05 
+
+46:05 mob X is a way of describing observables
+46:10 
+
+46:10 so data that can change and then
+46:12 
+
+46:12 observers so in this case if we have you
+46:14 
+
+46:14 know two components we've got the outer
+46:16 
+
+46:16 component and then an issue component
+46:17 
+
+46:17 when you render that view you you know
+46:20 
+
+46:20 you go through some data and your view
+46:23 
+
+46:23 is an observable so any data that you
+46:25 
+
+46:25 touch gets registered by mob X saying oh
+46:28 
+
+46:28 this component rendered this data object
+46:30 
+
+46:30 now if the data in the background
+46:33 
+
+46:33 changes for whatever reason mod X will
+46:36 
+
+46:36 automatically issue a real render of
+46:38 
+
+46:38 that component so what happens is if any
+46:41 
+
+46:41 of the data that we render here gets
+46:43 
+
+46:43 changed in our object graph being in a
+46:45 
+
+46:45 property or even a collection the
+46:48 
+
+46:48 appropriate component gets we rendered
+46:51 
+
+46:51 so essentially if I in my view now want
+46:55 
+
+46:55 to change the title of a bug bug to big
+46:58 
+
+46:58 bug I would essentially just simply say
+47:01 
+
+47:01 you know go to the data that I have
+47:03 
+
+47:03 which is the issue that instance and
+47:05 
+
+47:05 just set the property title to bid that
+47:08 
+
+47:08 a big bad bug Mobius would pick up and
+47:12 
+
+47:12 be like whoa the data Triscuit changed
+47:14 
+
+47:14 its an observer so let me figure out who
+47:17 
+
+47:17 was rendering this data and it would go
+47:20 
+
+47:20 back and say well this comment actually
+47:21 
+
+47:21 component of this one issue was has
+47:24 
+
+47:24 rendered the title of that of that of
+47:28 
+
+47:28 the issue and thus it gets rear-ended
+47:31 
+
+47:31 automatically on the fly so what this
+47:33 
+
+47:33 means is we now have an object graph
+47:36 
+
+47:36 where any change automatically is
+47:38 
+
+47:38 reflected on your view so we essentially
+47:41 
+
+47:41 can't forget about the view now like the
+47:43 
+
+47:43 view is always up-to-date I mean I
+47:44 
+
+47:44 change my data when I add things to
+47:46 
+
+47:46 collections when I change properties in
+47:48 
+
+47:48 there
+47:49 
+
+47:49 my view is rerender this is your you
+47:52 
+
+47:52 know normal state management but we've
+47:55 
+
+47:55 got a problem here we've got the issue
+47:58 
+
+47:58 here twice right
+47:60 
+
+47:60 so if God's you know if you one assigned
+48:02 
+
+48:02 to a team an issue one also under the
+48:05 
+
+48:05 user collections of that issue in order
+48:08 
+
+48:08 for this to work like we could do two
+48:10 
+
+48:10 things if you had a JSON structure we
+48:13 
+
+48:13 would somewhere have to keep you know
+48:15 
+
+48:15 track of what this is but the same issue
+48:17 
+
+48:17 is and whenever we do an update we would
+48:20 
+
+48:20 have to update it in two places which is
+48:22 
+
+48:22 obviously not gonna work very well so
+48:24 
+
+48:24 they really only option is that this is
+48:27 
+
+48:27 the same instance of that object so we
+48:30 
+
+48:30 have an object graph that can have
+48:31 
+
+48:31 references to the same object in itself
+48:34 
+
+48:34 and maybe it has even cyclical
+48:36 
+
+48:36 references up-and-down so I would
+48:39 
+
+48:39 imagine that a user object would have a
+48:41 
+
+48:41 reference back to the team of which
+48:43 
+
+48:43 you're part of so you have you know if
+48:45 
+
+48:45 you get a user object you could be able
+48:47 
+
+48:47 to say what's the object or what's the
+48:49 
+
+48:49 team of that user and render their
+48:50 
+
+48:50 team's name for example and now we have
+48:54 
+
+48:54 to sort of take a leap of faith you'll
+48:56 
+
+48:56 understand what this means going forward
+48:59 
+
+48:59 but how can we how can we create this
+49:02 
+
+49:02 graph out of sort of objects that can
+49:04 
+
+49:04 appear multiple times in that graph so
+49:07 
+
+49:07 the leap of faith is I'm gonna gonna
+49:09 
+
+49:09 you're not gonna talk to you about is so
+49:12 
+
+49:12 if create an object pool just normalize
+49:14 
+
+49:14 all your data structures into one pour
+49:16 
+
+49:16 there's one big array of all the objects
+49:18 
+
+49:18 that represent your entire data set in
+49:20 
+
+49:20 your application and this object graph
+49:23 
+
+49:23 is represented by five
+49:26 
+
+49:26 different objects model objects that we
+49:28 
+
+49:28 have and somehow from this object pool
+49:30 
+
+49:30 we're then able to you know create this
+49:33 
+
+49:33 object graph and then pass that object
+49:36 
+
+49:36 graph to the views so that it could
+49:38 
+
+49:38 render it gets rendered in order to make
+49:41 
+
+49:41 this a bit easier lets you know simplify
+49:43 
+
+49:43 that graph and you know look at what's
+49:46 
+
+49:46 what's going on here
+49:47 
+
+49:47 so in our object pool we have only three
+49:49 
+
+49:49 objects but we have a graph of sort of
+49:52 
+
+49:52 five instances in the graphs we have a
+49:54 
+
+49:54 team with an issue assigned to a user
+49:56 
+
+49:56 one and the team one has users only one
+49:60 
+
+49:60 user which has an issue so let's start
+50:04 
+
+50:04 from the get-go let's construct this
+50:06 
+
+50:06 graph let's say that we have an object
+50:08 
+
+50:08 pool arm that he can stream data into
+50:10 
+
+50:10 and in the beginning your object pool is
+50:13 
+
+50:13 empty now I get your first item which is
+50:16 
+
+50:16 sort of special it's the route item that
+50:17 
+
+50:17 then you get from from from somewhere
+50:19 
+
+50:19 else we don't care at this point what it
+50:21 
+
+50:21 is and it happens to be a team so a team
+50:25 
+
+50:25 has essentially well two important
+50:28 
+
+50:28 properties of its own and then then it
+50:30 
+
+50:30 has these collections that are not
+50:33 
+
+50:33 represented in the data that it receives
+50:34 
+
+50:34 so when an object is created in the pool
+50:37 
+
+50:37 it receives two properties as data on
+50:40 
+
+50:40 the ID of the team and the name and
+50:43 
+
+50:43 obviously type as well we need to figure
+50:45 
+
+50:45 out you know what what kind of object we
+50:47 
+
+50:47 need to create in here so based on this
+50:50 
+
+50:50 we simply create a team and the object
+50:53 
+
+50:53 graph looks very simple we have a team
+50:54 
+
+50:54 it hasn't doesn't have any issues it
+50:57 
+
+50:57 doesn't have any users next up we get a
+51:01 
+
+51:01 user into the graph so now it gets
+51:04 
+
+51:04 interesting
+51:05 
+
+51:05 like what that's the object pool need to
+51:07 
+
+51:07 do in order to sort of construct this
+51:09 
+
+51:09 object graph I mean here again we have a
+51:12 
+
+51:12 few properties that we get in data we
+51:14 
+
+51:14 get an ID and a name those are inherent
+51:16 
+
+51:16 properties to the object itself and then
+51:19 
+
+51:19 we get a reference we get a team ID and
+51:21 
+
+51:21 we simply say that you know whenever we
+51:23 
+
+51:23 see something with an ID you know we
+51:25 
+
+51:25 assume that it's a reference to
+51:26 
+
+51:26 something else and these are special
+51:29 
+
+51:29 rules in place for the object pool to
+51:32 
+
+51:32 figure out what to do with that
+51:33 
+
+51:33 reference so in this case we say you
+51:36 
+
+51:36 know whenever somewhere we have a
+51:38 
+
+51:38 metadata describe that
+51:40 
+
+51:40 whenever a user gets a team ID a few
+51:42 
+
+51:42 things need to happen the first thing is
+51:44 
+
+51:44 that with this team ID that object
+51:47 
+
+51:47 should go back to the object pool find
+51:49 
+
+51:49 an object with that ID which is team 1
+51:52 
+
+51:52 and then associate the team property
+51:55 
+
+51:55 with a team so you never get in the data
+51:59 
+
+51:59 that the object pool receives you never
+52:00 
+
+52:00 get a team but you only get a reference
+52:03 
+
+52:03 to a team and the object pool resolves
+52:04 
+
+52:04 that reference the second thing that is
+52:07 
+
+52:07 sort of described in the metadata
+52:09 
+
+52:09 somewhere is that whenever we update an
+52:11 
+
+52:11 team we also have a reference from a
+52:15 
+
+52:15 team back to a user so whenever we
+52:18 
+
+52:18 update the team on a user object the
+52:20 
+
+52:20 user object should go to the team and
+52:22 
+
+52:22 add itself to the members collection so
+52:30 
+
+52:30 this way we get to this object graph we
+52:34 
+
+52:34 had the team ID of t1 we resolve that
+52:37 
+
+52:37 it's actually you know a reference to
+52:39 
+
+52:39 the team we assign the team to the users
+52:42 
+
+52:42 team property and that triggers it to
+52:45 
+
+52:45 add itself to the members collection of
+52:47 
+
+52:47 the team so what does this look in code
+52:52 
+
+52:52 you know I talked about metadata you
+52:55 
+
+52:55 could do it in multiple ways you need to
+52:58 
+
+52:58 describe it some somewhere somehow um
+52:60 
+
+52:60 this is how we did it so this is
+53:02 
+
+53:02 actually a model class of you know how
+53:04 
+
+53:04 we would build a model class we use
+53:06 
+
+53:06 decorators everywhere to sort of
+53:09 
+
+53:09 describe our data decorators if you're
+53:12 
+
+53:12 not familiar essentially a piece of data
+53:13 
+
+53:13 that wrap the property or method or a
+53:15 
+
+53:15 class and can do things with it in our
+53:18 
+
+53:18 case we create so many properties on
+53:20 
+
+53:20 that object or on that class and we
+53:22 
+
+53:22 write out some some data to a metadata
+53:24 
+
+53:24 metadata you know structure or class so
+53:29 
+
+53:29 that we can later on you know ask you
+53:31 
+
+53:31 know that metadata what do we need to do
+53:33 
+
+53:33 when something happens on on these teams
+53:35 
+
+53:35 so the parse this we've got the two
+53:39 
+
+53:39 properties which are you know simple
+53:40 
+
+53:40 properties the ID and name we tagged
+53:42 
+
+53:42 them with a property docket decorator
+53:44 
+
+53:44 we will need this later in order to
+53:46 
+
+53:46 figure out you know when something
+53:48 
+
+53:48 changes because we need to sort of keep
+53:50 
+
+53:50 a list of all the changes that we do up
+53:52 
+
+53:52 to an element
+53:53 
+
+53:53 forget it for now but what is
+53:54 
+
+53:54 interesting is the money to one color or
+53:56 
+
+53:56 many to one decorator that we have here
+53:58 
+
+53:58 it serves two purposes it says that we
+54:03 
+
+54:03 have a team that we never will receive
+54:05 
+
+54:05 data but our rule in our mind or in our
+54:08 
+
+54:08 you know framework says that if you have
+54:11 
+
+54:11 a many to one decorator we can always
+54:13 
+
+54:13 post fix the property name with an ID
+54:15 
+
+54:15 and that is a reference to that team so
+54:17 
+
+54:17 whenever I receive an object that's
+54:19 
+
+54:19 called
+54:19 
+
+54:19 team ID it means that I should actually
+54:22 
+
+54:22 resolve this team and set its value
+54:25 
+
+54:25 the second thing says that you know it's
+54:27 
+
+54:27 a reference to an actual team and in
+54:30 
+
+54:30 that team we have a property called
+54:32 
+
+54:32 members so the money to one collection
+54:34 
+
+54:34 decorator also then manages or writes a
+54:37 
+
+54:37 property dynamically at runtime that
+54:40 
+
+54:40 then when the team is set goes to the
+54:42 
+
+54:42 team and assign assigns itself to the
+54:45 
+
+54:45 members collection of that team
+54:47 
+
+54:47 so simply with some decorators we can
+54:50 
+
+54:50 describe how we should construct our
+54:52 
+
+54:52 graphing data or our graph one more in
+54:59 
+
+54:59 this in this data we have a one-to-many
+55:00 
+
+55:01 collection which is essentially the the
+55:03 
+
+55:03 other way around so we're saying that we
+55:05 
+
+55:05 have a collection of issues on the user
+55:07 
+
+55:07 so if an issue has an assignee it will
+55:10 
+
+55:10 then sort of you know get a reference to
+55:14 
+
+55:14 that user who's the assignee and then
+55:16 
+
+55:16 add itself into the issues collection
+55:18 
+
+55:18 that is decorated by the one-to-many
+55:20 
+
+55:20 decorator which is what happens next
+55:25 
+
+55:25 next up they shoe comes in again we have
+55:29 
+
+55:29 an ID and a name in here let me have a
+55:31 
+
+55:31 team ID and assignee ID and again if it
+55:34 
+
+55:34 if the post fix is ID it's a reference
+55:36 
+
+55:36 of some object our decorators will then
+55:39 
+
+55:39 take care of figuring out what what to
+55:41 
+
+55:41 do with that property reference so in
+55:44 
+
+55:44 this case resolve team ID to the team
+55:47 
+
+55:47 and that decorator says well add the
+55:49 
+
+55:49 issue to the team's issue collection as
+55:51 
+
+55:51 well then we resolve the assignee we set
+55:54 
+
+55:54 it as the assignee on the issue as an
+55:57 
+
+55:57 actual real object and again we you know
+55:60 
+
+55:60 add it to the issues collection of the
+56:02 
+
+56:02 user all done through these decorators
+56:05 
+
+56:05 so once the third object comes in
+56:07 
+
+56:07 our object graph changes to what we want
+56:09 
+
+56:09 we have a team that has an issue that
+56:11 
+
+56:11 has an assignee feasor we have a user's
+56:13 
+
+56:13 collection on the team
+56:15 
+
+56:15 that has an issues collections that have
+56:17 
+
+56:17 as one issue and this is not a full
+56:20 
+
+56:20 representation of the graph because what
+56:22 
+
+56:22 you could do is like from issue you
+56:23 
+
+56:23 could get back to the assignee and from
+56:26 
+
+56:26 that assignee get back to the you to the
+56:27 
+
+56:27 team and then you know do a continuous
+56:29 
+
+56:29 cycle if you if you will but now we're
+56:33 
+
+56:33 in a in a place where you know if we
+56:35 
+
+56:35 stream objects into our object pool this
+56:38 
+
+56:38 graph gets populated and as you
+56:41 
+
+56:41 remembered when that graph gets
+56:42 
+
+56:42 populated our view updates so we don't
+56:45 
+
+56:45 need to you know at this point take care
+56:47 
+
+56:47 of the video anymore we just need to
+56:48 
+
+56:48 make sure that we can convert from this
+56:50 
+
+56:50 object pulled this object graph now what
+56:53 
+
+56:53 happens if an object gets removed from
+56:54 
+
+56:54 the pool the you know the unwinding of
+56:58 
+
+56:58 things happens essentially with the same
+56:59 
+
+56:59 decorator's things will happen so an
+57:03 
+
+57:03 issues deleted from the pool we again
+57:05 
+
+57:05 loop through all the properties sea ball
+57:07 
+
+57:07 there's a team ID there's an assignee ID
+57:09 
+
+57:09 so let's set these alternate because i'm
+57:12 
+
+57:12 going away so i'm gonna remove all the
+57:14 
+
+57:14 references that i have so the team get
+57:16 
+
+57:16 set to no and the assignee gets do it
+57:18 
+
+57:18 get set to no and because these are the
+57:20 
+
+57:20 special properties that have been
+57:21 
+
+57:21 dynamically created by our decorators
+57:23 
+
+57:23 they will go into the appropriate
+57:25 
+
+57:25 collections and remove itself from those
+57:27 
+
+57:27 collections so when we remove an object
+57:29 
+
+57:29 from the pool that object gets removed
+57:32 
+
+57:32 from the object graph as well and a last
+57:36 
+
+57:36 thing that I don't have on slides is if
+57:37 
+
+57:37 you change values like if you change you
+57:40 
+
+57:40 know an issues assignee from one person
+57:42 
+
+57:42 to another then essentially a deletion
+57:45 
+
+57:45 happens first so that user gets nailed
+57:47 
+
+57:47 out and removed from the appropriate
+57:49 
+
+57:49 collections and then assigned to new
+57:51 
+
+57:51 collections so the object craft now
+57:53 
+
+57:53 follows every single change every update
+57:55 
+
+57:55 every deletion and every insertion of
+57:57 
+
+57:57 objects in the pool
+58:04 
+
+58:04 silence so we can forget about the
+58:08 
+
+58:08 object graph right because we have now a
+58:11 
+
+58:11 pool if in our pool anything changes the
+58:15 
+
+58:15 object graph will change which will then
+58:17 
+
+58:17 change our view so we've simplified the
+58:21 
+
+58:21 problem to you know we have this object
+58:22 
+
+58:22 pool how can we send data out and back
+58:25 
+
+58:25 in to this object pool because if
+58:27 
+
+58:27 everything if this works then everything
+58:29 
+
+58:29 else down they live down the line that I
+58:31 
+
+58:31 showed before it works as well so for
+58:35 
+
+58:35 that we add one almost final concept
+58:38 
+
+58:38 which is the transaction queue which is
+58:41 
+
+58:41 whenever the object pool now it's
+58:44 
+
+58:44 notified of changes in any of the
+58:46 
+
+58:46 objects so the object pool has to listen
+58:49 
+
+58:49 to every single property on every single
+58:50 
+
+58:50 you know model in its pool and we did
+58:53 
+
+58:53 that through the property decorator that
+58:56 
+
+58:56 yeah in this one code slide and all the
+58:58 
+
+58:58 other other are the other decorators as
+59:01 
+
+59:01 well that we have so if you for example
+59:03 
+
+59:03 you know update the the title of an
+59:06 
+
+59:06 issue and the assignee we get a
+59:08 
+
+59:08 transaction an update transaction saying
+59:11 
+
+59:11 well you know they should one was just
+59:13 
+
+59:13 update updated the title was updated to
+59:15 
+
+59:15 big bug and the assignee was updated to
+59:17 
+
+59:17 user one at the same time these are like
+59:20 
+
+59:20 making a second change as well you know
+59:22 
+
+59:22 let's take user one and update its name
+59:24 
+
+59:24 to Thomas so we would have two
+59:28 
+
+59:28 transactions sitting in the queue and
+59:30 
+
+59:30 those transactions all the data has
+59:32 
+
+59:32 already been applied to our view because
+59:34 
+
+59:34 if you remember we make the changes in
+59:36 
+
+59:36 the view that updates the model their
+59:37 
+
+59:37 properties of issues that then goes to
+59:40 
+
+59:40 the object pool and that object pool
+59:41 
+
+59:41 creates that creates the transactions so
+59:44 
+
+59:44 our view is already already presenting
+59:46 
+
+59:46 the latest changes that were that we
+59:49 
+
+59:49 have transactions for now it is our
+59:51 
+
+59:51 responsibility to send those
+59:52 
+
+59:52 transactions somewhere to the backend
+59:53 
+
+59:53 and have the backend validate that we
+59:55 
+
+59:55 actually can make these changes so in
+59:59 
+
+59:59 order how they arrived these
+60:01 
+
+60:01 transactions we set them to a back-end
+60:03 
+
+60:03 and here I get a bit hand-wavy
+60:06 
+
+60:06 because we don't have you know the whole
+60:07 
+
+60:07 evening you could do this with a rest
+60:10 
+
+60:10 call a graph keel call a WebSocket
+60:12 
+
+60:12 whatever Muse graph cure for this
+60:14 
+
+60:14 because it makes it actually pretty
+60:16 
+
+60:16 simple
+60:17 
+
+60:17 we have a standard
+60:18 
+
+60:18 way of updating every single object so
+60:20 
+
+60:20 we don't own them on the client side we
+60:22 
+
+60:22 don't have to do anything new because
+60:24 
+
+60:24 we've got this model-based class that
+60:26 
+
+60:26 can create a a a graphical mutation for
+60:31 
+
+60:31 you know any any object that it has so
+60:35 
+
+60:35 it can loop through all the properties
+60:36 
+
+60:36 see what changed and create that
+60:39 
+
+60:39 transaction or sorry that mutation and
+60:42 
+
+60:42 send it via graph gear to the back end
+60:44 
+
+60:44 and the back end can then either accept
+60:46 
+
+60:46 or reject that change right so usually
+60:50 
+
+60:50 in our application and this is important
+60:53 
+
+60:53 for real-time applications we do assume
+60:55 
+
+60:55 that most of the changes that we send go
+60:57 
+
+60:57 through because otherwise you would have
+61:00 
+
+61:00 a hard time of sort of you know yeah
+61:03 
+
+61:03 rolling back changes because you know
+61:05 
+
+61:05 the user has already seen these changes
+61:06 
+
+61:06 the users make the changes they're
+61:08 
+
+61:08 visible in the UI and now we make a
+61:09 
+
+61:09 network call which might take this half
+61:11 
+
+61:11 a second or a second and the back end
+61:13 
+
+61:13 might might say you know oh you can't
+61:16 
+
+61:16 make this change so what happens in the
+61:19 
+
+61:19 in that case that you know the back end
+61:21 
+
+61:21 says sorry this is not allowed
+61:24 
+
+61:24 you know allowed change maybe there's a
+61:25 
+
+61:25 conflict maybe we had some rules only on
+61:29 
+
+61:29 the backend side which we didn't have on
+61:31 
+
+61:31 there on the client side the back end
+61:33 
+
+61:33 can reject a change and it will go well
+61:36 
+
+61:36 let's take the first example of
+61:37 
+
+61:37 acceptance what happens when the back
+61:39 
+
+61:40 end accepts a change let's say we have
+61:42 
+
+61:42 this one from the first transaction and
+61:44 
+
+61:44 the back end comes back and says cool
+61:46 
+
+61:46 fine I saved them in the database this
+61:48 
+
+61:48 is now the world well the state of
+61:50 
+
+61:50 things then we simply just remove the
+61:52 
+
+61:52 transaction because our client is
+61:54 
+
+61:54 already up to date we don't need to do
+61:55 
+
+61:55 anything else because we are we are
+61:57 
+
+61:57 already displaying the correct data now
+62:00 
+
+62:00 if the backend rejects that change our
+62:03 
+
+62:03 transaction needs to hold all the
+62:05 
+
+62:05 previous values that the object had
+62:07 
+
+62:07 before it got transformed so the
+62:10 
+
+62:10 transaction can then roll back those
+62:11 
+
+62:11 changes so in this case if you know
+62:13 
+
+62:13 issue one you know the tile got changed
+62:16 
+
+62:16 from bug to big bug the transaction
+62:19 
+
+62:19 would know that its previous title bus
+62:20 
+
+62:20 bug so if it gets rejected it goes back
+62:23 
+
+62:23 to the object pool and updates that
+62:25 
+
+62:25 object with bug so what the user would
+62:29 
+
+62:29 see is a flicker you would see
+62:31 
+
+62:31 up they do something else stay for a
+62:33 
+
+62:33 while and then flicker back they can
+62:35 
+
+62:35 actually demonstrate that because we
+62:36 
+
+62:36 have a bug currently in our in our tool
+62:40 
+
+62:40 we just launched an issue archive where
+62:44 
+
+62:44 you can go sort of back and look at all
+62:47 
+
+62:47 issues let me make this a bigger so I
+62:51 
+
+62:51 can go into the archive and load up what
+62:53 
+
+62:53 they are issues that I've archived now
+62:56 
+
+62:56 we haven't put these rules into the
+62:57 
+
+62:57 client yet where we say that you can't
+62:59 
+
+62:59 modify any properties of an archive
+63:01 
+
+63:01 issue because its archives already so
+63:03 
+
+63:03 when I try to do this I try to go in
+63:05 
+
+63:05 here and change the assignee you'll see
+63:08 
+
+63:08 that it flickers for just a millisecond
+63:10 
+
+63:10 and then we you know display an alert
+63:13 
+
+63:13 saying you can't make this change
+63:14 
+
+63:14 because the back and said you know sorry
+63:16 
+
+63:16 now so when I try to make that change
+63:18 
+
+63:18 again um it'll flicker and happens for
+63:21 
+
+63:21 all the state changes all the changes
+63:23 
+
+63:23 that I want to do so it just doesn't get
+63:26 
+
+63:26 updated so I thought about to change its
+63:28 
+
+63:28 name you'll see the name change
+63:30 
+
+63:30 immediately updated on the UI before it
+63:33 
+
+63:33 gets reverted back into the previous
+63:34 
+
+63:34 state so one good thing to consider you
+63:38 
+
+63:38 know real time synchronization is only
+63:40 
+
+63:40 really good for applications where most
+63:42 
+
+63:42 of the changes that the client makes are
+63:45 
+
+63:45 going to be accepted by their backends
+63:46 
+
+63:46 so we perform every single operation
+63:48 
+
+63:48 optimistically optimistically that the
+63:50 
+
+63:50 backend will you know just approve of
+63:52 
+
+63:52 the changes that we have now there's all
+64:01 
+
+64:01 kinds of nuances in here you know you
+64:03 
+
+64:03 need to do some rebasing if you have
+64:04 
+
+64:04 multiple you know multiple transactions
+64:08 
+
+64:08 in your queue and you get updates from
+64:09 
+
+64:09 our other users um those are sort of
+64:11 
+
+64:11 super advanced topics um which you don't
+64:13 
+
+64:13 need to need to look into or you know
+64:16 
+
+64:16 know right now there's a great blog post
+64:18 
+
+64:18 by the figma tech team which essentially
+64:22 
+
+64:22 describes what we have we brought the
+64:23 
+
+64:23 same system and it was super you know
+64:25 
+
+64:25 super curious - we threw their blog post
+64:27 
+
+64:27 cos I was about to write one of my own
+64:29 
+
+64:29 but essentially they described you know
+64:31 
+
+64:31 where to word what we've built um as
+64:33 
+
+64:33 well so they came to the exact you know
+64:34 
+
+64:34 same solutions that we have and they
+64:36 
+
+64:36 have you know all kinds of you know
+64:38 
+
+64:38 these edge cases nicely nicely described
+64:40 
+
+64:40 um there's a link in the arm in the
+64:41 
+
+64:41 places of presentation afterward if you
+64:43 
+
+64:43 if you want to have a read
+64:45 
+
+64:45 so the last piece that we need how one
+64:49 
+
+64:49 of the one of the last pieces is that we
+64:50 
+
+64:50 need to been in actually synchronize
+64:52 
+
+64:52 some data back to the client so what we
+64:55 
+
+64:55 do is the back end has a queue of all
+64:58 
+
+64:58 these changes that it made to the
+64:60 
+
+64:60 database so it has you know the object
+65:02 
+
+65:02 ID and all the changed properties and
+65:04 
+
+65:04 has a big transaction queue which then
+65:07 
+
+65:07 gets sent out to every single time that
+65:09 
+
+65:09 is connected for this we use WebSockets
+65:11 
+
+65:11 so we've got a WebSocket connection to
+65:14 
+
+65:14 the backends and those changes are
+65:15 
+
+65:15 immediately streamed to everybody and
+65:17 
+
+65:17 they go to a sync resolver which will
+65:19 
+
+65:19 then resolve the object in question
+65:21 
+
+65:21 figure out whether it's an updates at
+65:23 
+
+65:23 lesion or or insert and then modify the
+65:26 
+
+65:26 object pool so this is you know
+65:29 
+
+65:29 essentially how the flow works like the
+65:31 
+
+65:31 the object pool gets changed it makes it
+65:32 
+
+65:32 transaction it goes to the backend the
+65:34 
+
+65:34 back-end sends out these update these
+65:36 
+
+65:36 accepted updates to every single client
+65:38 
+
+65:38 and your object pool gets you know sets
+65:40 
+
+65:40 to the correct values and obviously you
+65:44 
+
+65:44 can have multiple climbs in here connect
+65:46 
+
+65:46 to the same backends everybody can make
+65:48 
+
+65:48 change at the same time all of those
+65:50 
+
+65:50 changes will be synchronized to
+65:51 
+
+65:51 everybody else so this is really not
+65:54 
+
+65:54 that complicated like the whole
+65:55 
+
+65:55 synchronization looks like a very you
+65:59 
+
+65:59 know big problem and a hard problem to
+66:01 
+
+66:01 to undertake but if you you know
+66:03 
+
+66:03 compartmentalize it into into smaller
+66:05 
+
+66:05 pieces it's actually in a quite
+66:08 
+
+66:08 maintainable and the last thing if you
+66:11 
+
+66:11 want to optimize the hell out of this
+66:12 
+
+66:12 you can introduce some some object
+66:14 
+
+66:14 stores you can store these objects and
+66:16 
+
+66:16 the clients for example in our use case
+66:18 
+
+66:18 every single change that we get from the
+66:21 
+
+66:21 back end gets stored locally in an index
+66:23 
+
+66:23 DB on the browser so when we reload our
+66:25 
+
+66:25 times we actually don't go to the server
+66:27 
+
+66:27 but we load up our local database load
+66:31 
+
+66:31 all the objects up from the pool at
+66:33 
+
+66:33 bootstrap time so we can display
+66:35 
+
+66:35 something to the clients immediately
+66:36 
+
+66:36 then we make the connection to the back
+66:38 
+
+66:38 ends and the backend streams all the
+66:40 
+
+66:40 rest of the connections to the client so
+66:44 
+
+66:44 if your offline for 202 hours you might
+66:46 
+
+66:47 sort of be receiving you know hundreds
+66:48 
+
+66:48 of updates while it runs but it's still
+66:51 
+
+66:51 a very good user experience to be able
+66:52 
+
+66:52 to you know launch your clients and you
+66:55 
+
+66:55 know in a few seconds the same goes for
+66:57 
+
+66:57 the transit
+66:58 
+
+66:58 if we want to enable sort of reloading
+67:00 
+
+67:00 we need to make sure that we store all
+67:02 
+
+67:02 the transactions in there in a local
+67:05 
+
+67:05 database as well so when we refresh the
+67:07 
+
+67:07 client we cannot only update all the
+67:09 
+
+67:09 objects but also all the transactions
+67:11 
+
+67:11 that we still haven't flight and and
+67:13 
+
+67:13 retry them and a nice thing about this
+67:15 
+
+67:15 is that you can actually with just this
+67:17 
+
+67:17 implementation you can support offline
+67:19 
+
+67:19 mode so you can go into offline on your
+67:22 
+
+67:22 client you can make changes all of these
+67:24 
+
+67:24 are gonna generate transactions those
+67:27 
+
+67:27 gonna come in stored you can refresh
+67:28 
+
+67:28 your client as you please and when they
+67:30 
+
+67:30 come back online the transaction queue
+67:32 
+
+67:32 will be drained sent to the backends and
+67:35 
+
+67:35 then receive those updates so that's how
+67:37 
+
+67:37 we can have sort of nice offline
+67:39 
+
+67:39 supports in the in the client as well so
+67:43 
+
+67:43 back to the full picture just to
+67:48 
+
+67:48 reiterate an entire flow you bootstrap
+67:52 
+
+67:52 something out of the local database you
+67:54 
+
+67:54 create this object pool that then based
+67:57 
+
+67:57 on all the decorators creates this
+67:58 
+
+67:58 object graph we insert the top object
+68:00 
+
+68:00 into a view that B gets rendered now the
+68:04 
+
+68:04 user makes a change to a bug R to an
+68:06 
+
+68:06 issue it updates this issue it notifies
+68:10 
+
+68:10 the object pool that a property was
+68:11 
+
+68:11 updated it creates a transaction sends
+68:15 
+
+68:15 it to the backend and you get syncs back
+68:18 
+
+68:18 to the object pool so as one last note
+68:24 
+
+68:24 so how does this helped us you know I
+68:27 
+
+68:27 said in the beginning that we don't have
+68:28 
+
+68:28 to care about these these updates or
+68:30 
+
+68:30 transactions or
+68:32 
+
+68:32 you know rest you know methods that get
+68:34 
+
+68:34 called the actual code to update an
+68:38 
+
+68:38 issue is really as simple as this like
+68:44 
+
+68:44 this is production code that we have in
+68:47 
+
+68:47 your application when we want to change
+68:48 
+
+68:48 some property we said it's property and
+68:51 
+
+68:51 be called safe which creates the
+68:52 
+
+68:52 transaction because we might want to
+68:53 
+
+68:53 batch the operations together that's
+68:56 
+
+68:56 what we need to do and the entire system
+68:58 
+
+68:58 handles the rest
+68:59 
+
+68:59 sorry us that's automatically up-to-date
+69:01 
+
+69:01 everything works
+69:03 
+
+69:03 transactions flow they get saved
+69:05 
+
+69:05 everything gets synced to everybody else
+69:07 
+
+69:07 and our code literally is this like we
+69:09 
+
+69:09 don't care about rest methods
+69:11 
+
+69:11 or making Network calls which is
+69:13 
+
+69:13 manipulate data which get automatically
+69:15 
+
+69:15 reflected on the clients in real time
+69:19 
+
+69:19 and it makes it for a very enjoyable
+69:21 
+
+69:21 developer experience as well and um yeah
+69:28 
+
+69:28 that's what I wanted to talk about
+69:29 
+
+69:29 Thanks it's better angular look at
+69:33 
+
+69:33 linear adapt if you want to get an
+69:35 
+
+69:35 invite
+69:35 
+
+69:35 hit me up tonight and I'll open up for
+69:39 
+
+69:39 you
+69:40 
+
+69:40 and there's the the blog post of the
+69:42 
+
+69:42 figma post I was talking about yes any
+69:53 
+
+69:53 questions yeah in our application we
+70:17 
+
+70:17 don't handle them
+70:17 
+
+70:17 we do blast come wins because it's not
+70:21 
+
+70:21 really a technical problem it's it's
+70:23 
+
+70:23 more of a business logic problem like
+70:25 
+
+70:25 you need to somehow figure out what to
+70:27 
+
+70:27 do with those updates you have an update
+70:29 
+
+70:29 that you did two hours ago when you were
+70:31 
+
+70:31 offline
+70:32 
+
+70:32 now you come back online and somebody
+70:33 
+
+70:33 has changed it so currently in the tool
+70:36 
+
+70:36 we don't have anything we just send it
+70:37 
+
+70:37 out and you know whoever got there last
+70:39 
+
+70:39 you know that that's that's the issue
+70:41 
+
+70:41 you know that that's the title of the
+70:42 
+
+70:42 issue now back at Groupon we did you
+70:45 
+
+70:45 know something more sophisticated
+70:46 
+
+70:46 because we dealt with money so we made
+70:50 
+
+70:50 sure that if if there ever is a conflict
+70:52 
+
+70:52 we then display that to the to the user
+70:54 
+
+70:54 so if you're in offline mode for a long
+70:57 
+
+70:57 time and then you know you have some
+70:58 
+
+70:58 credit card clashes or somebody you know
+71:00 
+
+71:00 paid for this bill already then we
+71:03 
+
+71:03 display a user alert saying you know hey
+71:05 
+
+71:05 here's this conflict what do you want to
+71:06 
+
+71:06 do with it and we let the user decide
+71:08 
+
+71:08 you know how to handle handled that got
+71:10 
+
+71:10 that conflict there really is no good
+71:13 
+
+71:13 solution to it
+71:14 
+
+71:14 it's it's all about the business logic
+71:16 
+
+71:16 like you you don't you can't fathom who
+71:19 
+
+71:19 should be right
+71:20 
+
+71:20 based on just timestamps
+71:25 
+
+71:25 yeah very good this linear like like can
+71:33 
+
+71:33 you tell about it is it like a
+71:35 
+
+71:35 replacement for China or oh yeah so
+71:39 
+
+71:39 linear thank you for I don't have to
+71:42 
+
+71:42 sort of go into the talk myself there's
+71:45 
+
+71:45 a little question linor is we're
+71:49 
+
+71:49 currently it's an issue tracking tool
+71:50 
+
+71:50 yes so black Jireh
+71:51 
+
+71:51 but you know a lot better I didn't say
+71:54 
+
+71:54 that
+71:55 
+
+71:55 sorry we never talk [ __ ] about you
+71:58 
+
+71:58 know and if the other provides yours
+71:59 
+
+71:59 awesome we love it but we heard that
+72:02 
+
+72:02 nobody else loves it we had the best
+72:06 
+
+72:06 thing that I had to you know that I saw
+72:08 
+
+72:08 was NPS study from I think it was
+72:11 
+
+72:11 coinbase um where they asked they just
+72:13 
+
+72:13 recently should year like a year ago and
+72:15 
+
+72:15 then they asked their team like you know
+72:18 
+
+72:18 NPS score give us an in his core of how
+72:20 
+
+72:20 you like JIRA and it was minus 78 which
+72:24 
+
+72:24 is yeah pretty pretty darn bad so we
+72:26 
+
+72:26 realized it's a problem like and even in
+72:29 
+
+72:29 our companies like our founders are from
+72:30 
+
+72:30 Airbnb
+72:31 
+
+72:31 coinbase and then myself from Weber we
+72:34 
+
+72:34 realize that you know even our companies
+72:35 
+
+72:35 didn't use great tooling for issue
+72:37 
+
+72:37 tracking for product teams nobody knew
+72:40 
+
+72:40 what sort of you know what processes to
+72:42 
+
+72:42 use every team is different and
+72:45 
+
+72:45 everybody used sort of a scrum like you
+72:47 
+
+72:47 know sort of scrum methodology to to
+72:51 
+
+72:51 sort of go through sprints and build
+72:53 
+
+72:53 products and we were like well you know
+72:55 
+
+72:55 I think we can be newbie can build a
+72:57 
+
+72:57 tool that is very opinionated that
+72:59 
+
+72:59 drives you in the right direction of you
+73:01 
+
+73:01 know creating a tool that helps you
+73:03 
+
+73:03 build products um in a way that we think
+73:05 
+
+73:05 it's good for companies um so we started
+73:08 
+
+73:08 building linear the first iteration like
+73:12 
+
+73:12 we're still in private beta it's sort of
+73:13 
+
+73:13 you know for smaller clients for smaller
+73:15 
+
+73:15 companies we don't have any sort of
+73:18 
+
+73:18 product management features in there
+73:19 
+
+73:19 just yet we started with sort of the
+73:21 
+
+73:21 engineers like we also think this is a
+73:23 
+
+73:23 great tool for engineers and a tool that
+73:26 
+
+73:26 they enjoy using and love sort of
+73:28 
+
+73:28 inserting issues into so we have all
+73:31 
+
+73:31 kinds of sort of keyboard shortcuts
+73:32 
+
+73:32 we've got this awesome command-line menu
+73:34 
+
+73:34 so if you
+73:37 
+
+73:37 if you over over and I should item and
+73:39 
+
+73:39 hit come on K you get this you know nice
+73:41 
+
+73:41 many of all the commands that we can do
+73:43 
+
+73:43 for that for that particular issue you
+73:45 
+
+73:45 can search for it up comment on issue
+73:49 
+
+73:49 you hit it you go into the into the
+73:51 
+
+73:51 issue itself and you can make actions
+73:53 
+
+73:53 that way so it is a shoe tracking tool
+73:56 
+
+73:57 currently sort of for smaller teams
+73:59 
+
+73:59 maybe a hundred hundred fifty users but
+74:02 
+
+74:02 we're growing and we're making the
+74:03 
+
+74:03 product better and hopefully in the
+74:05 
+
+74:05 future we can sort of you know delivery
+74:07 
+
+74:07 to enterprises long I really want to ah
+74:23 
+
+74:23 but I don't have the time right now to
+74:25 
+
+74:25 do it because it would be a pretty big
+74:27 
+
+74:27 undertaking maybe maybe in the future
+74:29 
+
+74:29 III would really like to do it cuz I've
+74:32 
+
+74:32 built so many officers tools that I
+74:33 
+
+74:33 don't want to build another one so maybe
+74:35 
+
+74:35 this one is good enough and then I could
+74:37 
+
+74:37 open source the needs it from their own
+74:38 
+
+74:38 they're not it's built with the notion
+74:54 
+
+74:54 that you can take it out so be to have I
+74:57 
+
+74:57 guess my Trinity we do have sort of you
+75:01 
+
+75:01 know some extensions to it that are
+75:03 
+
+75:03 baked into the products but the core of
+75:05 
+
+75:05 it is it's pretty vanilla and you know I
+75:09 
+
+75:09 had the idea of you know I want to open
+75:10 
+
+75:10 sourced at some point in the future so
+75:12 
+
+75:12 let's do the separation now and let's
+75:15 
+
+75:15 build it in there so that we've got good
+75:17 
+
+75:17 base classes that I can plug into an
+75:19 
+
+75:19 open source project
+75:26 
+
+75:26 no other questions that thanks so much
+75:29 
+
+75:29 [Applause]
+75:39 
+
+75:39 just wait a minute let me see if
+75:56 
+
+75:56 something works it's actually pretty
+76:06 
+
+76:06 hard

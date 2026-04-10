@@ -1,0 +1,29 @@
+# Go
+go/bin/
+go/tmp/
+
+# Node
+node_modules/
+webapp/node_modules/
+webapp/.next/
+webapp/out/
+webapp/tsconfig.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+.claude/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+pgdata/
+
+# Env
+.env
+.env.local

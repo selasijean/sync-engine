@@ -1,0 +1,204 @@
+# Real-Time Sync
+
+Real-time sync is handled by `SyncConnection` (`core/SyncConnection.ts`). It maintains an SSE (Server-Sent Events) connection, receives delta packets, and applies them to the ObjectPool and IndexedDB.
+
+## Why SSE
+
+SSE is a long-lived HTTP connection where the server pushes line-delimited text messages to the client. It's simpler than WebSockets for unidirectional server→client data, automatically reconnects, and works over standard HTTP/2. The client doesn't need to send data over the SSE connection — writes go over normal HTTP POST.
+
+## The Connection
+
+```typescript
+connect() {
+  const url = `${baseUrl}/stream?lastSyncId=${meta.lastSyncId}`
+              + `&syncGroups=${meta.subscribedSyncGroups.join(",")}`;
+  
+  this.eventSource = new EventSource(url);
+  
+  this.eventSource.onmessage = (event) => {
+    const action = JSON.parse(event.data);
+    this.enqueuePacket({ syncActions: [action] });
+  };
+  
+  this.eventSource.onerror = () => {
+    this.eventSource.close();
+    this.openEventSource(); // reconnect with fresh meta — picks up any new lastSyncId
+  };
+}
+```
+
+Two things worth noting:
+
+1. **`lastSyncId` in the URL.** The server uses this to catch the client up. If the tab was in the background for 5 minutes and missed 200 deltas, the server sends all 200 before switching to live streaming.
+
+2. **Manual reconnect on error.** The browser's built-in SSE reconnect reuses the original URL — stale `lastSyncId`. The engine closes and re-opens with a fresh URL read from `__meta`, which has the latest `lastSyncId` from the most recently processed packet.
+
+## Delta Packets
+
+The unit of real-time sync is a `DeltaPacket`:
+
+```typescript
+interface DeltaPacket {
+  syncActions: SyncAction[];
+  addedSyncGroups?: string[];
+  removedSyncGroups?: string[];
+}
+
+interface SyncAction {
+  id: number;          // monotonically increasing sync ID
+  modelName: string;   // "Issue"
+  modelId: string;     // "issue-abc123"
+  action: "I" | "U" | "D" | "A" | "V" | "C";
+  data?: Record<string, unknown>;
+}
+```
+
+Action codes:
+- `"I"` — Insert (new model)
+- `"U"` — Update (field changes)
+- `"D"` — Delete (permanent)
+- `"A"` — Archive (soft delete)
+- `"V"` — Validate (server confirms a client's optimistic write)
+- `"C"` — Custom (app-specific operation)
+
+Packets are processed **sequentially** — the engine queues incoming packets and processes one at a time. This prevents race conditions where two overlapping deltas could leave the pool in an inconsistent state.
+
+## 7-Step Delta Processing
+
+`processDeltaPacket` is the core of the sync engine. Every incoming packet goes through these steps:
+
+**Step 1: Handle sync group changes**
+If the packet adds or removes sync groups, update `__meta.subscribedSyncGroups` and trigger the appropriate data fetch or purge. See [05-sync-groups.md](./05-sync-groups.md).
+
+**Step 2–3: (internal bookkeeping)**
+
+**Step 4: Write to IndexedDB**
+Before touching the in-memory pool, persist every action to IDB. This ensures durability — if the tab crashes after this point, the data is on disk.
+
+```typescript
+for (const action of packet.syncActions) {
+  if (["I", "U", "V", "C"].includes(action.action)) {
+    await db.writeModels(action.modelName, [{ id: action.modelId, ...action.data }]);
+  } else if (["D", "A"].includes(action.action)) {
+    await db.deleteModel(action.modelName, action.modelId);
+  }
+}
+```
+
+**Step 5: Apply to the ObjectPool**
+For each action, call `applySyncAction()` — see details below.
+
+**Step 6: Update `lastSyncId`**
+The highest `syncAction.id` in the packet becomes the new `lastSyncId` in `__meta`. This is the watermark for future reconnects.
+
+**Step 7: Resolve waiting transactions**
+Any `TransactionQueue` entries in the `awaitingSync` state that were waiting for this sync ID are marked `Completed` and removed from IDB.
+
+## Applying Sync Actions to the Pool
+
+### Insert (`"I"`)
+
+```
+Is this model already in the pool?
+  Yes → hydrate update (merge new data into existing instance)
+  No  → should we load it? (based on LoadStrategy + sync groups)
+        Yes → create instance, hydrate, pool.put()
+        No  → skip (model is out of scope for this client)
+```
+
+After inserting, two things happen:
+- **Rebase:** If there's a pending `UpdateTransaction` for this model (unlikely on insert, but possible), rebase it against the new data.
+- **Invalidate collections:** Any `LazyReferenceCollection` or `LazyOwnedCollection` that this new instance would belong to is marked dirty. On next access, it re-loads and includes the new item.
+
+### Update (`"U"`, `"V"`, `"C"`)
+
+1. Find the existing instance in the pool
+2. Capture which reference fields are changing (e.g., `teamId` changing) — needed for collection invalidation
+3. Hydrate the update (apply new field values)
+4. Rebase any pending `UpdateTransaction` for this model against the new data
+5. Invalidate collections affected by changed reference fields
+
+### Delete (`"D"`) and Archive (`"A"`)
+
+1. Run cascade delete: find all models that reference this one with `onDelete: "cascade"` or via `@BackReference`, and delete them recursively
+2. Handle `onDelete: "nullify"` references: set those ID fields to null on affected models
+3. Invalidate parent collections (so they no longer include the deleted item)
+4. Remove from pool
+
+## Cascade Delete
+
+When a model is deleted, `SyncConnection` walks the entire `ModelRegistry` looking for relationships that point at it:
+
+```
+Issue "issue-123" deleted
+  │
+  ├── Scan ModelRegistry for all models with @Reference("Issue")
+  │     DocumentContent has @Reference("Issue", { onDelete: "cascade" })
+  │     → delete all DocumentContent where issueId === "issue-123"
+  │
+  ├── Scan for @BackReference("Issue", ...)
+  │     Favorite has @BackReference("Issue", "issueId")
+  │     → delete Favorite where issueId === "issue-123"
+  │
+  └── Scan for @Reference("Issue", { onDelete: "nullify" })
+      → set those fields to null on any affected models
+```
+
+This cascade runs **client-side** — the client applies it locally without waiting for the server to send individual delete packets for each child. The server should be consistent, but the client doesn't wait for it.
+
+## Collection Invalidation
+
+Rather than maintaining live, always-up-to-date collections, the engine uses **invalidation on write**. When a delta updates a model that is a member of a collection, that collection is marked dirty.
+
+```
+Delta: Issue "issue-abc" updated, teamId changed from "team-a" to "team-b"
+  │
+  ├── Invalidate Team("team-a").issues  ← no longer contains this issue
+  └── Invalidate Team("team-b").issues  ← now contains this issue
+```
+
+On the next `useCollection(team.issues)` render, the collection re-loads from the pool and reflects the change. This is simpler and more correct than trying to keep every collection perfectly in sync during every delta.
+
+## Conflict Rebase
+
+When a delta updates a model for which you have a pending local change, the engine rebases your change:
+
+```
+Your pending write: issue.title = "My Title" (oldValue: "Original")
+Incoming delta: issue.title = "Server Title", priority = 2
+  │
+  ├── Apply delta: issue.title = "Server Title", priority = 2
+  ├── Rebase your pending: oldValue → "Server Title" (new baseline)
+  └── Re-apply your pending: issue.title = "My Title"
+
+Result: title = "My Title", priority = 2
+```
+
+Your change wins (last-writer-wins). The server's other field changes are preserved. Your undo record is updated to reflect "Server Title" as the revert target.
+
+See [06-transactions-and-undo.md](./06-transactions-and-undo.md) for the full rebase story.
+
+## Sequence Diagram: Full Round-Trip
+
+```
+User                  Client                   Server              Other Client
+  │                     │                         │                      │
+  │ issue.title = "X"   │                         │                      │
+  │ issue.save()        │                         │                      │
+  │─────────────────────▶ enqueue UpdateTx        │                      │
+  │                     │ pool.put (optimistic)   │                      │
+  │                     │─── POST /sync ──────────▶                      │
+  │                     │                         │ process write        │
+  │                     │◀── 200 OK, syncId=42 ───│                      │
+  │                     │ tx → CompletedButUnsynced                       │
+  │                     │                         │── SSE delta ─────────▶
+  │                     │◀── SSE delta (syncId=42)│                      │
+  │                     │ write IDB               │                      │
+  │                     │ pool.put                │                      │
+  │                     │ notify("Issue")         │  pool.put            │
+  │                     │ tx → Completed          │  notify("Issue")     │
+  │                     │                         │                      │
+  │ (no visible change) │                         │                      │
+```
+
+The user sees `"X"` immediately (optimistic update in pool at `enqueue` time). The SSE round-trip is invisible — it just confirms and propagates to others.

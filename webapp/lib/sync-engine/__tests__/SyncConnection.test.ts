@@ -1,0 +1,524 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { SyncConnection } from "@sync-engine/SyncConnection";
+import { Database } from "@sync-engine/Database";
+import { ObjectPool } from "@sync-engine/ObjectPool";
+import { TransactionQueue } from "@sync-engine/TransactionQueue";
+import { BaseModel } from "@sync-engine/BaseModel";
+import { TestTask, TestProject, TestNote, TestActivity } from "./fixtures";
+import type { DeltaPacket } from "@sync-engine/SyncConnection";
+
+// We test processDeltaPacket directly (private) to avoid needing a real EventSource.
+const process = (conn: SyncConnection, packet: DeltaPacket) =>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (conn as any).processDeltaPacket(packet);
+
+let db: Database;
+let pool: ObjectPool;
+let queue: TransactionQueue;
+let conn: SyncConnection;
+
+beforeEach(async () => {
+  BaseModel.storeManager = null;
+  db = new Database(crypto.randomUUID());
+  await db.connect();
+
+  // SyncConnection reads currentMeta; save a baseline so it doesn't bail early.
+  await db.saveMeta({
+    lastSyncId: 0,
+    firstSyncId: 0,
+    subscribedSyncGroups: [],
+    schemaHash: "test",
+    dbVersion: 1,
+    backendDatabaseVersion: 0,
+  });
+
+  pool = new ObjectPool();
+  queue = new TransactionQueue(db, pool);
+  conn = new SyncConnection("http://localhost/events", db, pool, queue);
+});
+
+afterEach(async () => {
+  BaseModel.storeManager = null;
+  conn.disconnect();
+  await db.destroy();
+});
+
+describe("SyncConnection", () => {
+  // ── Insert action (I) ──────────────────────────────────────────────────────
+
+  describe("action: I (insert)", () => {
+    it("adds a new model to the pool", async () => {
+      await process(conn, {
+        syncActions: [
+          {
+            id: 1,
+            action: "I",
+            modelName: "TestTask",
+            modelId: "t1",
+            data: { title: "New task", done: false },
+          },
+        ],
+      });
+
+      const task = pool.getById("TestTask", "t1");
+      expect(task).toBeDefined();
+      expect((task as TestTask).title).toBe("New task");
+    });
+
+    it("writes the record to IndexedDB", async () => {
+      await process(conn, {
+        syncActions: [
+          {
+            id: 1,
+            action: "I",
+            modelName: "TestTask",
+            modelId: "t2",
+            data: { title: "Persisted" },
+          },
+        ],
+      });
+
+      const record = await db.readModel("TestTask", "t2");
+      expect(record).not.toBeNull();
+      expect(record!.title).toBe("Persisted");
+    });
+
+    it("updates an existing in-memory model rather than replacing it", async () => {
+      const existing = new TestTask();
+      existing.hydrate({ id: "t1", title: "Old title" });
+      existing.makeModelObservable();
+      pool.put("TestTask", existing);
+
+      await process(conn, {
+        syncActions: [
+          {
+            id: 1,
+            action: "I",
+            modelName: "TestTask",
+            modelId: "t1",
+            data: { title: "Updated by server" },
+          },
+        ],
+      });
+
+      // Same object reference — not replaced
+      expect(pool.getById("TestTask", "t1")).toBe(existing);
+      expect(existing.title).toBe("Updated by server");
+    });
+
+    it("advances lastSyncId in meta", async () => {
+      await process(conn, {
+        syncActions: [
+          {
+            id: 42,
+            action: "I",
+            modelName: "TestTask",
+            modelId: "t1",
+            data: { title: "x" },
+          },
+        ],
+      });
+
+      const meta = await db.loadMeta();
+      expect(meta!.lastSyncId).toBe(42);
+    });
+  });
+
+  // ── Update action (U) ──────────────────────────────────────────────────────
+
+  describe("action: U (update)", () => {
+    it("updates an in-memory model's properties", async () => {
+      const task = new TestTask();
+      task.hydrate({ id: "t1", title: "Before" });
+      task.makeModelObservable();
+      pool.put("TestTask", task);
+
+      await process(conn, {
+        syncActions: [
+          {
+            id: 2,
+            action: "U",
+            modelName: "TestTask",
+            modelId: "t1",
+            data: { title: "After" },
+          },
+        ],
+      });
+
+      expect(task.title).toBe("After");
+    });
+
+    it("updates the IndexedDB record", async () => {
+      await db.writeModels("TestTask", [{ id: "t1", title: "Before" }]);
+
+      await process(conn, {
+        syncActions: [
+          {
+            id: 2,
+            action: "U",
+            modelName: "TestTask",
+            modelId: "t1",
+            data: { title: "After" },
+          },
+        ],
+      });
+
+      const record = await db.readModel("TestTask", "t1");
+      expect(record!.title).toBe("After");
+    });
+
+    it("does nothing for a model not currently in the pool", async () => {
+      await expect(
+        process(conn, {
+          syncActions: [
+            {
+              id: 2,
+              action: "U",
+              modelName: "TestTask",
+              modelId: "ghost",
+              data: { title: "Whatever" },
+            },
+          ],
+        }),
+      ).resolves.not.toThrow();
+    });
+  });
+
+  // ── Delete action (D) ──────────────────────────────────────────────────────
+
+  describe("action: D (delete)", () => {
+    it("removes the model from the pool", async () => {
+      const task = new TestTask();
+      task.hydrate({ id: "t1" });
+      task.makeModelObservable();
+      pool.put("TestTask", task);
+
+      await process(conn, {
+        syncActions: [
+          {
+            id: 3,
+            action: "D",
+            modelName: "TestTask",
+            modelId: "t1",
+          },
+        ],
+      });
+
+      expect(pool.getById("TestTask", "t1")).toBeUndefined();
+    });
+
+    it("removes the record from IndexedDB", async () => {
+      await db.writeModels("TestTask", [{ id: "t1", title: "Gone" }]);
+
+      await process(conn, {
+        syncActions: [
+          {
+            id: 3,
+            action: "D",
+            modelName: "TestTask",
+            modelId: "t1",
+          },
+        ],
+      });
+
+      const record = await db.readModel("TestTask", "t1");
+      expect(record).toBeNull();
+    });
+
+    it("is safe when the model is not in the pool", async () => {
+      await expect(
+        process(conn, {
+          syncActions: [
+            {
+              id: 3,
+              action: "D",
+              modelName: "TestTask",
+              modelId: "ghost",
+            },
+          ],
+        }),
+      ).resolves.not.toThrow();
+    });
+  });
+
+  // ── Cascade delete via BackReference ──────────────────────────────────────
+
+  describe("cascade delete (BackReference)", () => {
+    it("removes TestNote instances whose taskId matches the deleted TestTask", async () => {
+      // TestNote has @BackReference("TestTask", "taskId")
+      // → when TestTask is deleted, TestNotes with matching taskId are removed.
+      const task = new TestTask();
+      task.hydrate({ id: "task-1" });
+      task.makeModelObservable();
+      pool.put("TestTask", task);
+
+      const note1 = new TestNote();
+      note1.hydrate({ id: "note-1", taskId: "task-1" });
+      note1.makeModelObservable();
+      pool.put("TestNote", note1);
+
+      const note2 = new TestNote();
+      note2.hydrate({ id: "note-2", taskId: "task-1" });
+      note2.makeModelObservable();
+      pool.put("TestNote", note2);
+
+      await process(conn, {
+        syncActions: [
+          {
+            id: 4,
+            action: "D",
+            modelName: "TestTask",
+            modelId: "task-1",
+          },
+        ],
+      });
+
+      expect(pool.getById("TestNote", "note-1")).toBeUndefined();
+      expect(pool.getById("TestNote", "note-2")).toBeUndefined();
+    });
+
+    it("does not remove notes that belong to a different task", async () => {
+      const task = new TestTask();
+      task.hydrate({ id: "task-1" });
+      task.makeModelObservable();
+      pool.put("TestTask", task);
+
+      const noteOther = new TestNote();
+      noteOther.hydrate({ id: "note-other", taskId: "task-999" });
+      noteOther.makeModelObservable();
+      pool.put("TestNote", noteOther);
+
+      await process(conn, {
+        syncActions: [
+          {
+            id: 4,
+            action: "D",
+            modelName: "TestTask",
+            modelId: "task-1",
+          },
+        ],
+      });
+
+      expect(pool.getById("TestNote", "note-other")).toBeDefined();
+    });
+  });
+
+  // ── Cascade delete via Reference onDelete: cascade ────────────────────────
+
+  describe("cascade delete (Reference onDelete: cascade)", () => {
+    it("removes TestTasks whose projectId matches the deleted TestProject", async () => {
+      const project = new TestProject();
+      project.hydrate({ id: "proj-1" });
+      project.makeModelObservable();
+      pool.put("TestProject", project);
+
+      const task = new TestTask();
+      task.hydrate({ id: "t1", projectId: "proj-1" });
+      task.makeModelObservable();
+      pool.put("TestTask", task);
+
+      await process(conn, {
+        syncActions: [
+          {
+            id: 5,
+            action: "D",
+            modelName: "TestProject",
+            modelId: "proj-1",
+          },
+        ],
+      });
+
+      expect(pool.getById("TestTask", "t1")).toBeUndefined();
+    });
+  });
+
+  // ── resolveBySync ──────────────────────────────────────────────────────────
+
+  describe("resolveBySync", () => {
+    it("resolves awaiting transactions when the delta syncId matches", async () => {
+      const sender = vi.fn().mockResolvedValue({ success: true, lastSyncId: 7 });
+      queue.setSender(sender);
+
+      await queue.enqueueUpdate("t1", "TestTask", {
+        title: { oldValue: "A", newValue: "B" },
+      });
+      // Flush directly rather than via setTimeout to avoid fake-timer issues
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (queue as any).flush();
+      expect(queue.awaitingSyncCount).toBe(1);
+
+      const task = new TestTask();
+      task.hydrate({ id: "t1" });
+      task.makeModelObservable();
+      pool.put("TestTask", task);
+
+      // A delta packet with id 7 should call resolveBySync(7) → clear awaitingSync
+      await process(conn, {
+        syncActions: [
+          {
+            id: 7,
+            action: "U",
+            modelName: "TestTask",
+            modelId: "t1",
+            data: { title: "B" },
+          },
+        ],
+      });
+
+      expect(queue.awaitingSyncCount).toBe(0);
+    });
+  });
+
+  // ── shouldHydrateInsert — on-demand model gating ──────────────────────────
+
+  describe("shouldHydrateInsert (on-demand model gating)", () => {
+    let loadedCollections: Set<string>;
+    let connWithChecker: SyncConnection;
+
+    beforeEach(() => {
+      loadedCollections = new Set<string>();
+      connWithChecker = new SyncConnection(
+        "http://localhost/events",
+        db,
+        pool,
+        queue,
+        undefined,
+        undefined,
+        (modelName, indexKey, value) => loadedCollections.has(`${modelName}:${indexKey}:${value}`),
+      );
+    });
+
+    afterEach(() => {
+      connWithChecker.disconnect();
+    });
+
+    it("does not hydrate a Partial model insert when its collection has not been loaded", async () => {
+      await process(connWithChecker, {
+        syncActions: [
+          {
+            id: 1,
+            action: "I",
+            modelName: "TestActivity",
+            modelId: "act-1",
+            data: { taskId: "t1", text: "hello" },
+          },
+        ],
+      });
+
+      expect(pool.getById("TestActivity", "act-1")).toBeUndefined();
+    });
+
+    it("still writes the record to IDB even when not hydrating into pool", async () => {
+      await process(connWithChecker, {
+        syncActions: [
+          {
+            id: 1,
+            action: "I",
+            modelName: "TestActivity",
+            modelId: "act-1",
+            data: { taskId: "t1", text: "hello" },
+          },
+        ],
+      });
+
+      const record = await db.readModel("TestActivity", "act-1");
+      expect(record).not.toBeNull();
+    });
+
+    it("hydrates a Partial model insert when its parent collection has been loaded", async () => {
+      loadedCollections.add("TestActivity:taskId:t1");
+
+      await process(connWithChecker, {
+        syncActions: [
+          {
+            id: 1,
+            action: "I",
+            modelName: "TestActivity",
+            modelId: "act-1",
+            data: { taskId: "t1", text: "hello" },
+          },
+        ],
+      });
+
+      expect(pool.getById("TestActivity", "act-1")).toBeDefined();
+    });
+
+    it("does not hydrate when a different parent's collection is loaded", async () => {
+      loadedCollections.add("TestActivity:taskId:t2"); // t2, not t1
+
+      await process(connWithChecker, {
+        syncActions: [
+          {
+            id: 1,
+            action: "I",
+            modelName: "TestActivity",
+            modelId: "act-1",
+            data: { taskId: "t1", text: "hello" },
+          },
+        ],
+      });
+
+      expect(pool.getById("TestActivity", "act-1")).toBeUndefined();
+    });
+
+    it("always hydrates Instant model inserts regardless of loaded collections", async () => {
+      // loadedCollections is empty — but TestTask is Instant so it always hydrates
+      await process(connWithChecker, {
+        syncActions: [
+          {
+            id: 1,
+            action: "I",
+            modelName: "TestTask",
+            modelId: "t-new",
+            data: { title: "instant task" },
+          },
+        ],
+      });
+
+      expect(pool.getById("TestTask", "t-new")).toBeDefined();
+    });
+
+    it("updates an existing Partial model in the pool regardless of loaded state", async () => {
+      // The model is already in pool (e.g. loaded previously) — update should always apply
+      const existing = new TestActivity();
+      existing.hydrate({ id: "act-1", taskId: "t1", text: "old" });
+      existing.makeModelObservable();
+      pool.put("TestActivity", existing);
+
+      await process(connWithChecker, {
+        syncActions: [
+          {
+            id: 1,
+            action: "I",
+            modelName: "TestActivity",
+            modelId: "act-1",
+            data: { taskId: "t1", text: "updated" },
+          },
+        ],
+      });
+
+      expect(existing.text).toBe("updated");
+    });
+  });
+
+  // ── multiple actions in one packet ────────────────────────────────────────
+
+  describe("multiple actions in one packet", () => {
+    it("processes all actions and uses the max syncId", async () => {
+      await process(conn, {
+        syncActions: [
+          { id: 10, action: "I", modelName: "TestTask", modelId: "t10", data: { title: "A" } },
+          { id: 11, action: "I", modelName: "TestTask", modelId: "t11", data: { title: "B" } },
+          { id: 12, action: "I", modelName: "TestProject", modelId: "p1", data: { title: "P" } },
+        ],
+      });
+
+      expect(pool.getById("TestTask", "t10")).toBeDefined();
+      expect(pool.getById("TestTask", "t11")).toBeDefined();
+      expect(pool.getById("TestProject", "p1")).toBeDefined();
+
+      const meta = await db.loadMeta();
+      expect(meta!.lastSyncId).toBe(12);
+    });
+  });
+});
