@@ -1,0 +1,181 @@
+# Lazy Loading and Heap Size
+
+The engine can hold thousands of model instances in memory. Without lazy loading, all of them would be loaded at startup and live in the JavaScript heap for the entire session. Lazy loading lets the engine load data incrementally — only what's needed, when it's needed.
+
+## Why Heap Size Matters
+
+The JS heap is garbage collected. Large heaps cause:
+- Slower GC pauses (the browser freezes briefly while GC runs)
+- Higher memory pressure (browser may kill the tab or slow down)
+- Slower startup (more data to deserialize and hydrate)
+
+An app with 50,000 issues, 10,000 comments, and 1,000 users doesn't need all of that in RAM if the user is only viewing 30 issues. Lazy loading lets the heap stay proportional to what's actually visible.
+
+## Load Strategies
+
+Every model declares a `LoadStrategy` via `@ClientModel`:
+
+```typescript
+@ClientModel({ loadStrategy: LoadStrategy.Instant })
+export class Team extends BaseModel { ... }
+
+@ClientModel({ loadStrategy: LoadStrategy.Partial })
+export class DocumentContent extends BaseModel { ... }
+```
+
+| Strategy | Loaded at startup | Loaded when |
+|---|---|---|
+| `Instant` | Yes — all instances | Bootstrap |
+| `Lazy` | No | First access via collection or hook |
+| `Partial` | No | When a parent referencing them is viewed |
+| `ExplicitlyRequested` | No | Only when code calls `sm.loadOne(modelName, id)` |
+
+`Instant` models get a `FullStore`. All others get a `PartialStore`. The `FullStore` loads everything at bootstrap; the `PartialStore` starts empty and fills on demand.
+
+**The critical insight:** for `Partial` and `Lazy` models, records exist in IndexedDB but their hydrated instances don't exist in the ObjectPool or in the heap. They only enter the heap when explicitly loaded.
+
+## LazyReferenceCollection
+
+Defined in `core/LazyCollection.ts`. Represents a one-to-many relationship where the **child holds the foreign key**.
+
+Example: `Team.issues` — all Issues where `issue.teamId === team.id`.
+
+```
+team.issues  ←  LazyReferenceCollection
+                  referencedModelName: "Issue"
+                  inverseKey:          "teamId"
+                  parentId:            "team-eng"
+                  state:               idle | loading | loaded
+                  items:               BaseModel[]
+```
+
+### Two resolution paths
+
+**Sync (pool-first):** If the Issues are already in the pool (already loaded), the collection just filters:
+
+```typescript
+resolveFromPool(pool): Issue[] {
+  return pool.getAll("Issue").filter(i => i.teamId === this.parentId);
+}
+```
+
+No async, no IDB. This runs every time you access `.items` and the collection is loaded.
+
+**Async (IDB):** If the collection hasn't been loaded yet, calling `.load()`:
+
+1. Queries IDB by index: `readModelsByIndex("Issue", "teamId", "team-eng")`
+2. For each returned record, hydrates an Issue instance
+3. Puts each instance into the pool
+4. Marks `state = Loaded`
+
+After this, the pool has those Issue instances and future calls use the sync path.
+
+### Invalidation
+
+When a delta packet inserts a new Issue with `teamId: "team-eng"`, the engine doesn't push it into every relevant collection manually. Instead it **invalidates** those collections — marks them dirty. On the next access (e.g., component calls `useCollection(team.issues)`), the collection re-loads from the pool and picks up the new item.
+
+This keeps the delta-processing logic simple: it just updates the pool and IDB, and lets collections re-derive their state lazily.
+
+## LazyBackReference
+
+Represents a one-to-one inverse relationship where the parent owns the child.
+
+Example: `issue.favorite` — find the Favorite record where `favorite.issueId === issue.id`.
+
+```
+issue.favorite  ←  LazyBackReference
+                    referencedModelName: "Favorite"
+                    inverseOf:           "issueId"
+                    parentId:            "issue-123"
+                    value:               Favorite | null
+```
+
+Like `LazyReferenceCollection`, loading it queries IDB and hydrates the result into the pool.
+
+The ownership relationship means cascade delete is built in: when the Issue is deleted, the engine automatically deletes the Favorite.
+
+## LazyOwnedCollection
+
+Represents a one-to-many relationship where the **parent stores the array of child IDs**.
+
+Example: `team.memberIds: string[]` + `@OwnedCollection("User", { idsField: "memberIds" })` → `team.members`.
+
+```
+team.members  ←  LazyOwnedCollection
+                  referencedModelName: "User"
+                  idsGetter:           () => team.memberIds   ← live, not a snapshot
+```
+
+The `idsGetter` is a live function that reads the current array. When `team.memberIds` changes (a delta adds a new member), the next call to `collection.load()` picks up the new IDs automatically — no invalidation needed.
+
+**Resolution:** maps IDs to pool lookups, falls back to IDB for any missing ones.
+
+## How This Helps Heap Size
+
+Consider a workspace with:
+- 200 Teams (Instant)
+- 50,000 Issues (Instant)
+- 200,000 Comments (Lazy)
+- 50,000 DocumentContent records (Partial)
+
+At startup:
+- 200 Team instances in heap ✓
+- 50,000 Issue instances in heap ✓ (unavoidable — Instant)
+- 0 Comment instances in heap ✓ (in IDB only)
+- 0 DocumentContent instances in heap ✓ (in IDB only)
+
+When user opens Team A:
+- Team A's Issues already in pool (loaded at bootstrap)
+- `team.issues.load()` → filters pool → returns Issues already there (no new allocations)
+- `issue.comments.load()` for each visible issue → fetches ~20 comments each → ~600 Comment instances hydrated
+- Heap grew by 600 objects, not 200,000
+
+When user opens Issue X's document:
+- `issue.documentContent.load()` → fetches 1 DocumentContent record → 1 new instance
+- Heap grew by 1 object, not 50,000
+
+The heap grows proportionally to what's been viewed, not the total workspace size.
+
+### The Trade-off
+
+The heap never shrinks. There's no eviction — once a Comment is loaded into the pool, it stays there for the session. If the user browses through 50 teams over an hour, all their comments accumulate. This is acceptable for most sessions but can become significant for very long-lived sessions on large workspaces.
+
+This is a deliberate trade-off: eviction requires cache invalidation logic (what if a comment in the pool gets stale?), and the complexity cost was deemed higher than the memory cost for typical usage patterns.
+
+## The `usedForPartialIndexes` Flag
+
+```typescript
+@ClientModel({ loadStrategy: LoadStrategy.Instant, usedForPartialIndexes: true })
+export class Issue extends BaseModel { ... }
+```
+
+When this is `true`, the engine adds the model's ID to a `partialIndexValues` set on any LazyReferenceCollection that points at it. This allows the IDB query for those collections to use an index scan instead of a full table scan, even for partial models.
+
+In practice: if DocumentContent (Partial) references Issue (Instant, `usedForPartialIndexes: true`), then loading all DocumentContent for a given Issue uses an indexed IDB query rather than scanning the entire DocumentContent table.
+
+## Collection States
+
+All three lazy collection types share the same state machine:
+
+```
+Idle
+  │ (first .load() call)
+  ▼
+Loading
+  │ (IDB query completes)
+  ▼
+Loaded
+  │ (invalidated by delta)
+  ▼
+Idle  ← back to start, will re-load on next access
+```
+
+Or:
+```
+Loading
+  │ (IDB error)
+  ▼
+Error
+```
+
+The React hooks (`useCollection`, `useBackRef`, `useLazyCollection`) expose `isLoading`, `isLoaded`, and `error` from this state machine so components can render skeletons or error states appropriately.
