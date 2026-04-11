@@ -26,7 +26,18 @@ export class BaseModel {
   __mobx: { [key: string]: IObservableValue<unknown> | undefined } = {};
   __observabilityEnabled = false;
   store: IObjectPool | null = null;
-  static storeManager: IStoreManager | null = null;
+
+  // Backed by globalThis so it survives HMR module reloads in dev mode.
+  // Bundlers (webpack, Vite, etc.) re-execute modules on hot reload, which
+  // resets static field initializers — but globalThis is outside the module
+  // system and is never reset, keeping the live StoreManager reachable for
+  // new model instances created after a reload.
+  static get storeManager(): IStoreManager | null {
+    return (globalThis as { __syncEngineStore?: IStoreManager | null }).__syncEngineStore ?? null;
+  }
+  static set storeManager(sm: IStoreManager | null) {
+    (globalThis as { __syncEngineStore?: IStoreManager | null }).__syncEngineStore = sm ?? null;
+  }
 
   /** Runtime lazy collections, keyed by property name. */
   __collections: Record<string, LazyCollectionBase> = {};

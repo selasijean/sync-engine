@@ -379,7 +379,23 @@ export class TransactionQueue {
     // Clearing upfront means flush() has nothing to clean up, which is correct.
     await this.database.clearCachedTransactions();
 
+    // Build a signature set for transactions already in-flight, pending, or awaiting sync.
+    // If a transaction is currently being sent (executing) or already queued (pending),
+    // re-enqueueing from IDB would send a duplicate to the server.
+    // For INSERT this causes a conflict error → success:false → revertOne() removes
+    // the model from the pool (the "create after sleep doesn't show up" bug).
+    // UPDATE and DELETE are idempotent on the server, but skipping is still correct.
+    const inFlight = new Set<string>();
+    for (const tx of [...this.pending, ...this.executing, ...this.awaitingSync]) {
+      inFlight.add(`${tx.action}:${tx.modelName}:${tx.modelId}`);
+    }
+
+    let count = 0;
     for (const d of cached as CachedTransactionRecord[]) {
+      if (inFlight.has(`${d.action}:${d.modelName}:${d.modelId}`)) {
+        continue; // already being sent — skip to avoid duplicate
+      }
+
       let tx: BaseTransaction;
       switch (d.action) {
         case "U":
@@ -399,9 +415,12 @@ export class TransactionQueue {
       }
       tx.batchId = d.batchId ?? null;
       this.pending.push(tx);
+      count++;
     }
-    this.scheduleFlush();
-    return cached.length;
+    if (count > 0) {
+      this.scheduleFlush();
+    }
+    return count;
   }
 
   destroy() {
