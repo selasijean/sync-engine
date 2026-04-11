@@ -2,6 +2,143 @@
 
 A local-first sync engine with a Go backend. Real-time delta streaming via SSE, optimistic mutations, offline support, batch undo/redo.
 
+## Built for the agent world
+
+Most agent frameworks treat state as a solved problem: load context from a database, do work, write results back. Each agent operates on a static snapshot. Two agents working in the same workspace have no shared live model — they coordinate through the server, with all the latency and consistency problems that implies.
+
+This engine takes a different position. **The same sync primitive that powers the browser UI is the agent's working memory.** An agent doesn't query a database — it holds a reference to the same live in-memory model that a human is looking at in a browser tab. When the human edits something, the agent sees it instantly. When the agent acts, the human sees it immediately. The SSE stream is the coordination layer for both.
+
+This matters more as agents become real collaborators rather than background scripts:
+
+- **Real-time awareness**: agents react to changes as they happen — a human reassigns a ticket, an agent's subscription fires before the human's cursor has moved.
+- **Optimistic mutations**: agents don't wait for server round-trips to act. Writes are local-first, queued to the server in the background, broadcast to all consumers. An agent operates at the same speed as a human typing.
+- **Reversibility**: the undo stack works for agent writes too. A human can undo what an agent did. An agent can undo its own previous action. This is foundational for human-in-the-loop workflows where trust is still being established.
+- **Multi-agent coordination without a message bus**: agents sharing a `StoreManager` see each other's writes instantly with no protocol overhead. Agents with separate `StoreManager` instances converge via the SSE stream. Either way, there is no separate coordination layer to design.
+
+### Running an agent
+
+The engine core has zero React and zero browser dependencies. React hooks are a thin optional layer on top. The same `StoreManager` that powers a browser UI runs anywhere TypeScript runs.
+
+```ts
+import { StoreManager } from "./webapp/lib/sync-engine/core/StoreManager";
+import EventSource from "eventsource"; // npm i eventsource
+
+const sm = new StoreManager({
+  workspaceId: "agent-session-1",
+  bootstrapFetcher: async (type, since) => {
+    const res = await fetch(`http://localhost:8080/api/bootstrap?type=${type}&since=${since ?? 0}`);
+    return res.json();
+  },
+  transactionSender: async (batch) => {
+    const res = await fetch("http://localhost:8080/api/transactions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(batch),
+    });
+    return res.json();
+  },
+  syncUrl: "http://localhost:8081/api/events",
+  sseClientFactory: (url) => new EventSource(url), // swap in Node.js-compatible SSE
+});
+
+await sm.bootstrap();
+
+// The full world state, live
+const issues = sm.objectPool.getAll("Issue");
+
+// Write — optimistic locally, queued to server, broadcast to every connected client and agent
+issues[0].title = "Fixed by agent";
+issues[0].save();
+```
+
+### Execution environments
+
+The two pluggable seams — `sseClientFactory` and `storageAdapter` — let the engine run in any environment:
+
+| Environment | `sseClientFactory` | `storageAdapter` |
+|---|---|---|
+| Browser | default (`EventSource`) | default (IndexedDB) |
+| Node.js (long-running) | `eventsource` npm package | `MemoryAdapter` or custom |
+| Serverless / edge | fetch-based SSE reader | `MemoryAdapter` |
+| CLI tool | `eventsource` npm package | `MemoryAdapter` |
+
+**`MemoryAdapter`** is a full in-memory implementation of the storage interface — no IndexedDB, no filesystem, no globals. It is the right default for any agent that doesn't need state to survive a process restart:
+
+```ts
+import { MemoryAdapter } from "./core/MemoryAdapter";
+
+const sm = new StoreManager({
+  workspaceId: "agent-1",
+  bootstrapFetcher: ...,
+  storageAdapter: new MemoryAdapter(),
+  sseClientFactory: (url) => new EventSource(url),
+});
+```
+
+For agents that do need durability — resuming a long task after a restart, replaying pending transactions after a crash — implement `StorageAdapter` with SQLite, Redis, or any key-value store. The interface is small (12 methods) and the contract is straightforward.
+
+### Isolated vs shared agent state
+
+**Isolated** — each agent creates its own `StoreManager`. Independent working memory. All instances converge via the SSE stream: a write by one agent arrives at every other in real time. Use this for parallel agents working independently on different parts of a problem.
+
+**Shared** — multiple agents share one `StoreManager` instance. Single pool, one SSE connection. Writes from any agent are immediately visible to all others without a server round-trip. Use this for tightly-collaborating agents, or for an agent running alongside a UI that needs to see and react to human edits instantly.
+
+### Reactivity in headless mode
+
+React's observer model doesn't exist in Node.js. The engine exposes two callback APIs that fill that role.
+
+**`objectPool.subscribe`** — fires whenever any model of a given type is added, updated, or removed. This is the primary way an agent reacts to SSE deltas arriving from the server:
+
+```ts
+const unsubscribe = sm.objectPool.subscribe("Issue", () => {
+  const issues = sm.objectPool.getAll("Issue");
+  // re-evaluate state, make decisions, write back
+});
+
+// Release when the agent shuts down
+unsubscribe();
+```
+
+This is the agent's core event loop. The SSE stream delivers a delta → the pool updates → the subscription fires → the agent acts → the write is queued → the server broadcasts → all other agents and browser clients update. No polling, no manual diffing.
+
+**`collection.subscribe`** — fires when a specific lazy relationship loads or receives new members:
+
+```ts
+const team = sm.objectPool.getById("Team", teamId) as Team;
+const unsubscribe = team.issues.subscribe(() => {
+  // team.issues.items is now current
+});
+```
+
+Both return an unsubscribe function. Call it on shutdown. Both are plain callbacks — no MobX, no browser globals.
+
+**`model.watch()` — per-property reactivity**
+
+For field-level granularity — fire only when a specific property changes — use `watch` directly on the model:
+
+```ts
+const issue = sm.objectPool.getById("Issue", id) as Issue;
+
+const unwatch = issue.watch(
+  (m) => m.priority,
+  (newValue, oldValue) => console.log("priority changed:", oldValue, "→", newValue),
+);
+
+// Release when done
+unwatch();
+```
+
+The selector can read any combination of fields — only the return value is compared, so derived conditions work too:
+
+```ts
+issue.watch(
+  (m) => m.status === "done",
+  (isDone) => console.log("completion changed:", isDone),
+);
+```
+
+One boundary to know: `watch` tracks field changes on a model you already hold. It does not know when the pool gains a new model. For reacting to new arrivals from SSE deltas, use `objectPool.subscribe`. For reacting to field changes on a model you already hold, use `watch`.
+
 ## Structure
 
 ```

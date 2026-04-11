@@ -13,7 +13,7 @@
  * The undo stack stores "entries" — either a single tx or a batch of txs.
  */
 
-import { Database } from "./Database";
+import type { StorageAdapter } from "./Database";
 import { ObjectPool } from "./ObjectPool";
 import { ModelRegistry } from "./ModelRegistry";
 import {
@@ -52,7 +52,7 @@ type UndoEntry =
   | { kind: "batch"; batchId: string; txs: BaseTransaction[] };
 
 export class TransactionQueue {
-  private database: Database;
+  private database: StorageAdapter;
   private pool: ObjectPool;
   private sender: TransactionSender | null = null;
 
@@ -76,10 +76,12 @@ export class TransactionQueue {
   // Flush timer
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private flushDelay = 50; // ms — batches rapid saves
+  private undoLimit: number;
 
-  constructor(database: Database, pool: ObjectPool) {
+  constructor(database: StorageAdapter, pool: ObjectPool, undoLimit = 100) {
     this.database = database;
     this.pool = pool;
+    this.undoLimit = undoLimit;
   }
 
   setSender(sender: TransactionSender) {
@@ -101,6 +103,9 @@ export class TransactionQueue {
     }
     if (this.activeBatchTxs.length > 0 && !this.suppressUndoStack) {
       this.undoStack.push({ kind: "batch", batchId, txs: [...this.activeBatchTxs] });
+      if (this.undoStack.length > this.undoLimit) {
+        this.undoStack.shift();
+      }
       this.redoStack = [];
     }
     this.activeBatchId = null;
@@ -146,6 +151,9 @@ export class TransactionQueue {
       this.activeBatchTxs.push(tx);
     } else if (!this.suppressUndoStack) {
       this.undoStack.push({ kind: "single", tx });
+      if (this.undoStack.length > this.undoLimit) {
+        this.undoStack.shift();
+      }
       this.redoStack = [];
     }
 
@@ -361,6 +369,16 @@ export class TransactionQueue {
 
   async resendCached(): Promise<number> {
     const cached = await this.database.getCachedTransactions();
+    if (cached.length === 0) {
+      return 0;
+    }
+
+    // Clear before re-enqueueing. Reconstructed transactions don't carry their
+    // original idbKey, so flush() would see null keys and never delete them —
+    // causing the same transactions to replay on every subsequent restart.
+    // Clearing upfront means flush() has nothing to clean up, which is correct.
+    await this.database.clearCachedTransactions();
+
     for (const d of cached as CachedTransactionRecord[]) {
       let tx: BaseTransaction;
       switch (d.action) {
@@ -382,9 +400,7 @@ export class TransactionQueue {
       tx.batchId = d.batchId ?? null;
       this.pending.push(tx);
     }
-    if (cached.length > 0) {
-      this.scheduleFlush();
-    }
+    this.scheduleFlush();
     return cached.length;
   }
 

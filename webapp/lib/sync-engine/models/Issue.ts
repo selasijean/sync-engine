@@ -1,11 +1,5 @@
 import { BaseModel } from "../core/BaseModel";
-import {
-  ClientModel,
-  Property,
-  Reference,
-  Action,
-  Computed,
-} from "../core/decorators";
+import { ClientModel, Property, Reference, Action, Computed } from "../core/decorators";
 import { LoadStrategy } from "../core/types";
 import type { Team } from "./Team";
 import { dateSerializer, dateDeserializer } from "./serializers";

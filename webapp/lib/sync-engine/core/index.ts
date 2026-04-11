@@ -20,7 +20,8 @@ export { BaseModel } from "./BaseModel";
 // Bootstrapping
 export { ObjectPool } from "./ObjectPool";
 export { Database, BootstrapType } from "./Database";
-export type { DatabaseMeta } from "./Database";
+export type { DatabaseMeta, StorageAdapter } from "./Database";
+export { MemoryAdapter } from "./MemoryAdapter";
 export { FullStore, PartialStore, ModelStore } from "./Store";
 export { StoreManager, RestrictDeleteError } from "./StoreManager";
 export type {

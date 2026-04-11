@@ -189,7 +189,7 @@ describe("Database", () => {
       const key1 = await db.cacheTransaction({ action: "U", modelId: "t1" });
       const key2 = await db.cacheTransaction({ action: "I", modelId: "t2" });
       expect(key1).toBeGreaterThan(0);
-      expect(key2).toBeGreaterThan(key1);
+      expect((key2 as number)).toBeGreaterThan(key1 as number);
     });
 
     it("getCachedTransactions returns all cached entries", async () => {

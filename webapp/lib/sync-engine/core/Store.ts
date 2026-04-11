@@ -7,16 +7,16 @@
  */
 
 import type { BaseModel } from "./BaseModel";
-import { Database } from "./Database";
+import type { StorageAdapter } from "./Database";
 import { ObjectPool } from "./ObjectPool";
 import { type ModelMeta, LoadStrategy } from "./types";
 
 export abstract class ModelStore {
   protected meta: ModelMeta;
-  protected database: Database;
+  protected database: StorageAdapter;
   protected pool: ObjectPool;
 
-  constructor(meta: ModelMeta, database: Database, pool: ObjectPool) {
+  constructor(meta: ModelMeta, database: StorageAdapter, pool: ObjectPool) {
     this.meta = meta;
     this.database = database;
     this.pool = pool;

@@ -21,10 +21,10 @@
 
 import { ModelRegistry } from "./ModelRegistry";
 import { ObjectPool } from "./ObjectPool";
-import { Database, BootstrapType } from "./Database";
+import { Database, BootstrapType, type StorageAdapter } from "./Database";
 import { FullStore, PartialStore, type ModelStore } from "./Store";
 import { TransactionQueue, type TransactionSender } from "./TransactionQueue";
-import { SyncConnection, type DeltaPacket } from "./SyncConnection";
+import { SyncConnection, type DeltaPacket, type SSEClientFactory } from "./SyncConnection";
 import { BaseModel } from "./BaseModel";
 import { BootstrapPhase, LoadStrategy, PropertyType, type PropertyChange } from "./types";
 
@@ -69,7 +69,7 @@ export interface BootstrapResponse {
  * @param onlyModels optional: restrict to these model types (for two-phase bootstrap)
  */
 export type BootstrapFetcher = (
-  type: "full" | "partial",
+  type: BootstrapType.Full | BootstrapType.Partial,
   sinceSyncId?: number,
   onlyModels?: string[],
 ) => Promise<BootstrapResponse>;
@@ -89,6 +89,35 @@ export interface StoreManagerConfig {
   transactionSender?: TransactionSender;
   syncGroupFetcher?: SyncGroupFetcher;
   syncUrl?: string;
+
+  /**
+   * Custom SSE client factory. Defaults to the browser's built-in EventSource.
+   * Override to use the engine outside the browser — e.g. in Node.js or an agent:
+   *
+   *   import EventSource from "eventsource";
+   *   sseClientFactory: (url) => new EventSource(url)
+   */
+  sseClientFactory?: SSEClientFactory;
+
+  /**
+   * Custom storage backend. Defaults to IndexedDB (`Database`).
+   * Override for environments without IndexedDB — e.g. Node.js agents:
+   *
+   *   import { MemoryAdapter } from "./MemoryAdapter";
+   *   storageAdapter: new MemoryAdapter()
+   *
+   * Implement `StorageAdapter` to plug in SQLite, Redis, or any other backend.
+   * If omitted, `Database` is used and gracefully falls back to in-memory when
+   * IndexedDB is unavailable (no crash, but no persistence across restarts).
+   */
+  storageAdapter?: StorageAdapter;
+
+  /**
+   * Maximum number of undo entries kept in memory. Defaults to 100.
+   * Lower this for long-running agents that make many writes and don't need
+   * deep undo history (each entry holds model snapshots).
+   */
+  undoLimit?: number;
 
   /**
    * Two-phase full bootstrap. If provided, the first fetch loads only
@@ -126,7 +155,7 @@ export interface StoreManagerConfig {
 
 export class StoreManager {
   readonly objectPool: ObjectPool;
-  readonly database: Database;
+  readonly database: StorageAdapter;
   readonly transactionQueue: TransactionQueue;
 
   private stores = new Map<string, ModelStore>();
@@ -146,8 +175,8 @@ export class StoreManager {
   constructor(config: StoreManagerConfig) {
     this.config = config;
     this.objectPool = new ObjectPool();
-    this.database = new Database(config.workspaceId);
-    this.transactionQueue = new TransactionQueue(this.database, this.objectPool);
+    this.database = config.storageAdapter ?? new Database(config.workspaceId);
+    this.transactionQueue = new TransactionQueue(this.database, this.objectPool, config.undoLimit);
     if (config.transactionSender != null) {
       this.transactionQueue.setSender(config.transactionSender);
     }
@@ -214,6 +243,7 @@ export class StoreManager {
             ? (added, _removed) => this.handleSyncGroupsAdded(added)
             : undefined,
           this.isCollectionLoaded.bind(this),
+          this.config.sseClientFactory,
         );
         this.syncConnection.connect();
       }
@@ -248,7 +278,7 @@ export class StoreManager {
       // Phase 1: critical models only
       const criticalModels = allModelNames.filter((n) => !deferred.has(n));
       this.setPhase(BootstrapPhase.Fetching, `phase 1: ${criticalModels.length} critical models`);
-      const res = await this.config.bootstrapFetcher("full", undefined, criticalModels);
+      const res = await this.config.bootstrapFetcher(BootstrapType.Full, undefined, criticalModels);
 
       this.setPhase(BootstrapPhase.WritingToDatabase);
       await Promise.all(
@@ -277,7 +307,7 @@ export class StoreManager {
     } else {
       // Single-phase: fetch everything at once
       this.setPhase(BootstrapPhase.Fetching, "full");
-      const res = await this.config.bootstrapFetcher("full");
+      const res = await this.config.bootstrapFetcher(BootstrapType.Full);
 
       this.setPhase(BootstrapPhase.WritingToDatabase);
       await Promise.all(
@@ -307,7 +337,7 @@ export class StoreManager {
    */
   private async fetchDeferredModels(modelNames: string[], sinceSyncId: number) {
     try {
-      const res = await this.config.bootstrapFetcher("partial", sinceSyncId, modelNames);
+      const res = await this.config.bootstrapFetcher(BootstrapType.Partial, sinceSyncId, modelNames);
       await Promise.all(
         Object.entries(res.models).map(([name, records]) => {
           const store = this.stores.get(name);
@@ -338,7 +368,7 @@ export class StoreManager {
 
     // Fetch delta from server
     this.setPhase(BootstrapPhase.Fetching, `since syncId ${existing.lastSyncId}`);
-    const res = await this.config.bootstrapFetcher("partial", existing.lastSyncId);
+    const res = await this.config.bootstrapFetcher(BootstrapType.Partial, existing.lastSyncId);
 
     // Check backendDatabaseVersion. If the server's schema changed since our
     // last bootstrap, the delta data might be structured differently (renamed
@@ -397,7 +427,9 @@ export class StoreManager {
 
   commitCreate(model: BaseModel) {
     const meta = ModelRegistry.getMetaForInstance(model);
-    if (meta == null) { return; }
+    if (meta == null) {
+      return;
+    }
     model.makeModelObservable();
     this.objectPool.put(meta.name, model);
     const data = model.serialize();
@@ -642,9 +674,7 @@ export class StoreManager {
       throw err;
     }
     if (result instanceof Promise) {
-      return result
-        .finally(() => this.transactionQueue.endBatch(id))
-        .then(() => id);
+      return result.finally(() => this.transactionQueue.endBatch(id)).then(() => id);
     }
     this.transactionQueue.endBatch(id);
     return id;
@@ -678,9 +708,7 @@ export class StoreManager {
     indexKey: string,
     value: string,
   ): Promise<T[]> {
-    const inMemory = this.objectPool.getAll(modelName).filter(
-      (m) => prop(m, indexKey) === value,
-    );
+    const inMemory = this.objectPool.getAll(modelName).filter((m) => prop(m, indexKey) === value);
     const inMemoryIds = new Set(inMemory.map((m) => m.id));
 
     const key = StoreManager.collectionKey(modelName, indexKey, value);

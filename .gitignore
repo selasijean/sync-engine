@@ -1,13 +1,5 @@
-# Go
-go/bin/
-go/tmp/
-
-# Node
+# Node (root-level, if any)
 node_modules/
-webapp/node_modules/
-webapp/.next/
-webapp/out/
-webapp/tsconfig.tsbuildinfo
 
 # IDE
 .idea/
@@ -18,7 +10,7 @@ webapp/tsconfig.tsbuildinfo
 *~
 
 # OS
-.DS_Store
+**/.DS_Store
 Thumbs.db
 
 # Docker

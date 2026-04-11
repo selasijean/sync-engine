@@ -28,6 +28,13 @@ import {
 import { LoadStrategy } from "@sync-engine/types";
 import type { LazyReferenceCollection } from "@sync-engine/LazyCollection";
 import { dateSerializer, dateDeserializer } from "../models/serializers";
+import type { StoreManager } from "@sync-engine/StoreManager";
+
+/** Hydrate, make observable, and register a model in the given StoreManager's pool. */
+export function addToPool(sm: StoreManager, modelName: string, model: BaseModel) {
+  model.makeModelObservable();
+  sm.objectPool.put(modelName, model);
+}
 
 // ── TestWorkspace ─────────────────────────────────────────────────────────────
 
