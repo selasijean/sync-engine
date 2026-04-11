@@ -1,0 +1,39 @@
+{
+  "name": "sync-engine",
+  "version": "0.1.0",
+  "private": false,
+  "description": "A sync engine library for building local-first applications",
+  "main": "./src/core/index.ts",
+  "exports": {
+    ".": "./src/core/index.ts",
+    "./react": "./src/react/index.tsx"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "mobx": "^6.15.0",
+    "reflect-metadata": "^0.2.2"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@swc/core": "^1.15.24",
+    "@types/react": "^19.2.14",
+    "@vitest/coverage-v8": "^4.1.4",
+    "fake-indexeddb": "^6.2.5",
+    "jsdom": "^29.0.2",
+    "react": "^19.2.5",
+    "typescript": "^6.0.2",
+    "unplugin-swc": "^1.5.9",
+    "vitest": "^4.1.4"
+  }
+}

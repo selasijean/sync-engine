@@ -30,17 +30,11 @@
       "@/*": [
         "./*"
       ],
-      "@sync-engine/*": [
-        "./lib/sync-engine/core/*"
+      "sync-engine": [
+        "../packages/sync-engine/src/core/index.ts"
       ],
-      "@/sync-engine": [
-        "./lib/sync-engine/core"
-      ],
-      "@/sync-engine/react": [
-        "./lib/sync-engine/react"
-      ],
-      "@/sync-engine/models": [
-        "./lib/sync-engine/models"
+      "sync-engine/react": [
+        "../packages/sync-engine/src/react/index.tsx"
       ]
     }
   },

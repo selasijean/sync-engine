@@ -1,6 +1,4 @@
-import { BaseModel } from "../core/BaseModel";
-import { ClientModel, Property, Reference } from "../core/decorators";
-import { LoadStrategy } from "../core/types";
+import { BaseModel, ClientModel, Property, Reference, LoadStrategy } from "sync-engine";
 import type { Issue } from "./Issue";
 
 @ClientModel({ loadStrategy: LoadStrategy.Partial })

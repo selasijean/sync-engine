@@ -1,10 +1,10 @@
-import { BaseModel } from "../core/BaseModel";
-import { ClientModel, Property, EphemeralProperty } from "../core/decorators";
-import { LoadStrategy } from "../core/types";
+import { BaseModel, ClientModel, Property, ReferenceCollection, LoadStrategy } from "sync-engine";
+import type { LazyReferenceCollection } from "sync-engine";
+import type { Issue } from "./Issue";
 import { dateSerializer, dateDeserializer } from "./serializers";
 
 @ClientModel({ loadStrategy: LoadStrategy.Instant })
-export class User extends BaseModel {
+export class Team extends BaseModel {
   @Property({ serializer: dateSerializer, deserializer: dateDeserializer })
   public createdAt: Date = new Date();
 
@@ -15,8 +15,8 @@ export class User extends BaseModel {
   public name = "";
 
   @Property()
-  public email = "";
+  public key = "";
 
-  @EphemeralProperty()
-  public lastUserInteraction: Date | null = null;
+  @ReferenceCollection("Issue", { lazy: true })
+  public issues: LazyReferenceCollection<Issue>;
 }
