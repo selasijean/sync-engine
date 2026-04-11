@@ -18,7 +18,7 @@ import { ModelRegistry } from "./ModelRegistry";
 import { PropertyType, type PropertyChange, type IObjectPool, type IStoreManager } from "./types";
 import { LazyCollectionBase, LazyReferenceCollection, LazyBackReference } from "./LazyCollection";
 import { LazyOwnedCollection } from "./LazyOwnedCollection";
-import { action, computed, observable, type IObservableValue } from "mobx";
+import { action, computed, observable, reaction, type IObservableValue } from "mobx";
 
 export class BaseModel {
   id: string = crypto.randomUUID();
@@ -68,7 +68,10 @@ export class BaseModel {
       // re-resolve against the updated IDs array on next access.
       if (meta != null) {
         for (const [collectionName, ownedPropMeta] of meta.properties) {
-          if (ownedPropMeta.type === PropertyType.OwnedCollection && ownedPropMeta.idsField === propName) {
+          if (
+            ownedPropMeta.type === PropertyType.OwnedCollection &&
+            ownedPropMeta.idsField === propName
+          ) {
             this.__collections[collectionName]?.invalidate();
           }
         }
@@ -107,7 +110,7 @@ export class BaseModel {
               // hydrate() hasn't run yet (new model) — preserve the class field value.
               currentValue = ownDesc.value;
             }
-            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+             
             delete (this as Record<string, unknown>)[name];
           }
 
@@ -231,7 +234,7 @@ export class BaseModel {
     }
 
     // Stamp updatedAt when there are actual changes, if the model declares it as a @Property.
-    if (this.pendingChanges.size > 0 && meta?.properties.has("updatedAt")) {
+    if (this.pendingChanges.size > 0 && meta?.properties.has("updatedAt") === true) {
       (this as Record<string, unknown>)["updatedAt"] = new Date();
     }
 
@@ -254,6 +257,18 @@ export class BaseModel {
 
   get hasUnsavedChanges() {
     return this.pendingChanges.size > 0;
+  }
+
+  /**
+   * React to property changes on this model without importing MobX.
+   * Use on models obtained from the pool — `objectPool.getById` / `objectPool.getAll`.
+   *
+   * @param selector - reads the property (or derived value) to observe
+   * @param callback - fires whenever the selector result changes; receives new and previous value
+   * @returns unwatch function — call it to stop observing
+   */
+  watch<T>(selector: (model: this) => T, callback: (newValue: T, oldValue: T) => void): () => void {
+    return reaction(() => selector(this), callback);
   }
 
   // ---------------------------------------------------------------------------

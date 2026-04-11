@@ -40,7 +40,41 @@ export enum BootstrapType {
   Local = "local",
 }
 
-export class Database {
+/**
+ * Pluggable storage backend for the sync engine.
+ *
+ * The default implementation (`Database`) uses IndexedDB and is suited for
+ * browsers. Implement this interface to use a different backend — e.g.
+ * `MemoryAdapter` for Node.js agents, or a custom SQLite/Redis adapter for
+ * server-side environments that need durable off-heap storage.
+ */
+export interface StorageAdapter {
+  /** Open / initialise the storage backend. Called once before bootstrap. */
+  connect(): Promise<void>;
+  loadMeta(): Promise<DatabaseMeta | null>;
+  saveMeta(meta: DatabaseMeta): Promise<void>;
+  get currentMeta(): DatabaseMeta | null;
+  determineBootstrapType(): Promise<BootstrapType>;
+  writeModels(modelName: string, records: Record<string, unknown>[]): Promise<void>;
+  readAllModels(modelName: string): Promise<Record<string, unknown>[]>;
+  readModel(modelName: string, id: string): Promise<Record<string, unknown> | null>;
+  readModelsByIndex(
+    modelName: string,
+    indexName: string,
+    value: string,
+  ): Promise<Record<string, unknown>[]>;
+  deleteModel(modelName: string, id: string): Promise<void>;
+  deleteModels(modelName: string, ids: string[]): Promise<void>;
+  clearModelStore(modelName: string): Promise<void>;
+  cacheTransaction(data: unknown): Promise<number | null>;
+  getCachedTransactions(): Promise<unknown[]>;
+  deleteCachedTransactions(keys: number[]): Promise<void>;
+  clearCachedTransactions(): Promise<void>;
+  destroy(): Promise<void>;
+  get isConnected(): boolean;
+}
+
+export class Database implements StorageAdapter {
   private db: IDBDatabase | null = null;
   private workspaceId: string;
   private meta: DatabaseMeta | null = null;
@@ -57,6 +91,12 @@ export class Database {
   // =========================================================================
 
   async connect(): Promise<void> {
+    // Gracefully handle environments without IndexedDB (Node.js, agents).
+    // All methods guard on this.db == null, so the engine runs in-memory.
+    if (typeof indexedDB === "undefined") {
+      return;
+    }
+
     const dbName = `sync_${this.workspaceId}`;
 
     // Step 1: Open at current version to read meta and check schema
@@ -344,7 +384,9 @@ export class Database {
         // Fallback: full scan + filter (slower, but correct)
         const r = store.getAll();
         r.onsuccess = () =>
-          resolve((r.result ?? []).filter((rec: Record<string, unknown>) => rec[indexName] === value));
+          resolve(
+            (r.result ?? []).filter((rec: Record<string, unknown>) => rec[indexName] === value),
+          );
         r.onerror = () => reject(r.error);
       }
     });
@@ -385,9 +427,9 @@ export class Database {
   // Transaction cache
   // =========================================================================
 
-  async cacheTransaction(data: unknown): Promise<number> {
+  async cacheTransaction(data: unknown): Promise<number | null> {
     if (this.db == null) {
-      return -1;
+      return null;
     }
     return new Promise((resolve, reject) => {
       const tx = this.db!.transaction("__transactions", "readwrite");
@@ -432,7 +474,9 @@ export class Database {
   async destroy() {
     this.db?.close();
     this.db = null;
-    indexedDB.deleteDatabase(`sync_${this.workspaceId}`);
+    if (typeof indexedDB !== "undefined") {
+      indexedDB.deleteDatabase(`sync_${this.workspaceId}`);
+    }
   }
 
   get isConnected() {

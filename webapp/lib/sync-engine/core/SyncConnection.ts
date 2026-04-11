@@ -18,7 +18,7 @@
  *   the pool on next access.
  */
 
-import { Database } from "./Database";
+import type { StorageAdapter } from "./Database";
 import { ObjectPool } from "./ObjectPool";
 import { ModelRegistry } from "./ModelRegistry";
 import { TransactionQueue } from "./TransactionQueue";
@@ -47,8 +47,32 @@ export type SyncGroupChangeHandler = (
   removedGroups: string[],
 ) => Promise<void>;
 
+/**
+ * Minimal interface for an SSE client.
+ *
+ * The browser's built-in EventSource satisfies this. In Node.js / agent
+ * environments, pass any object that exposes the same three members —
+ * e.g. the `eventsource` npm package or a fetch-based SSE reader.
+ *
+ * Example Node.js adapter using the `eventsource` package:
+ *
+ *   import EventSource from "eventsource";
+ *   const sseClientFactory: SSEClientFactory = (url) => new EventSource(url);
+ */
+export interface SSEClient {
+  onmessage: ((event: { data: string }) => void) | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onerror: ((event?: any) => void) | null;
+  close(): void;
+}
+
+export type SSEClientFactory = (url: string) => SSEClient;
+
+/** Default factory — uses the browser's built-in EventSource. */
+const browserSSEFactory: SSEClientFactory = (url) => new EventSource(url);
+
 export class SyncConnection {
-  private eventSource: EventSource | null = null;
+  private eventSource: SSEClient | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   /**
@@ -64,12 +88,13 @@ export class SyncConnection {
 
   constructor(
     private url: string,
-    private database: Database,
+    private database: StorageAdapter,
     private pool: ObjectPool,
     private queue: TransactionQueue,
     private onPacket?: (p: DeltaPacket) => void,
     private onSyncGroupsChanged?: SyncGroupChangeHandler,
     private isCollectionLoaded?: (modelName: string, indexKey: string, value: string) => boolean,
+    private sseClientFactory: SSEClientFactory = browserSSEFactory,
   ) {}
 
   /**
@@ -94,7 +119,7 @@ export class SyncConnection {
   }
 
   get isConnected() {
-    return this.eventSource?.readyState === EventSource.OPEN;
+    return this.eventSource != null;
   }
 
   private openEventSource() {
@@ -108,7 +133,7 @@ export class SyncConnection {
     const url = `${this.url}?lastSyncId=${lastSyncId}&syncGroups=${encodeURIComponent(syncGroups)}`;
 
     try {
-      this.eventSource = new EventSource(url);
+      this.eventSource = this.sseClientFactory(url);
 
       this.eventSource.onmessage = (e) => {
         try {
@@ -344,7 +369,9 @@ export class SyncConnection {
           const inverseKey = propMeta.inverseOf!;
           const toDelete = this.pool
             .getAll(meta.name)
-            .filter((m) => (m as unknown as Record<string, unknown>)[inverseKey] === deletedModelId);
+            .filter(
+              (m) => (m as unknown as Record<string, unknown>)[inverseKey] === deletedModelId,
+            );
           for (const m of toDelete) {
             this.pool.remove(meta.name, m.id);
           }
@@ -362,7 +389,9 @@ export class SyncConnection {
         ) {
           const toDelete = this.pool
             .getAll(meta.name)
-            .filter((m) => (m as unknown as Record<string, unknown>)[propMeta.name] === deletedModelId);
+            .filter(
+              (m) => (m as unknown as Record<string, unknown>)[propMeta.name] === deletedModelId,
+            );
           for (const m of toDelete) {
             this.pool.remove(meta.name, m.id);
           }
@@ -486,9 +515,10 @@ export class SyncConnection {
         propMeta.type === PropertyType.ReferenceCollection &&
         propMeta.referenceTo === childModelName
       ) {
-        const collection = (parent as unknown as Record<string, unknown>).__collections != null
-          ? (parent.__collections as Record<string, { invalidate?: () => void }>)[propName]
-          : undefined;
+        const collection =
+          (parent as unknown as Record<string, unknown>).__collections != null
+            ? (parent.__collections as Record<string, { invalidate?: () => void }>)[propName]
+            : undefined;
         if (collection?.invalidate != null) {
           collection.invalidate();
         }

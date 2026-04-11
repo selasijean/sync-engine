@@ -1,13 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi, type MockedFunction } from "vitest";
 import { StoreManager, RestrictDeleteError } from "@sync-engine/StoreManager";
-import { BaseModel } from "@sync-engine/BaseModel";
-import { TestTask, TestProject, TestUser, TestComment, TestActivity } from "./fixtures";
-
-// Helpers — put a fully-observable model into the manager's pool.
-function addToPool(manager: StoreManager, modelName: string, model: BaseModel) {
-  model.makeModelObservable();
-  manager.objectPool.put(modelName, model);
-}
+import { TestTask, TestProject, TestUser, TestComment, TestActivity, addToPool } from "./fixtures";
 
 let manager: StoreManager;
 
@@ -224,7 +217,11 @@ describe("StoreManager", () => {
   // ── loadCollection — onDemandFetcher ──────────────────────────────────────
 
   describe("loadCollection() with onDemandFetcher", () => {
-    type OnDemandFetcher = (modelName: string, indexKey: string, value: string) => Promise<Record<string, unknown>[]>;
+    type OnDemandFetcher = (
+      modelName: string,
+      indexKey: string,
+      value: string,
+    ) => Promise<Record<string, unknown>[]>;
     let onDemandFetcher: MockedFunction<OnDemandFetcher>;
     let managerWithFetcher: StoreManager;
 
@@ -296,7 +293,9 @@ describe("StoreManager", () => {
       existing.hydrate({ id: "a-sse", taskId: "t1", text: "from sse" });
       addToPool(managerWithFetcher, "TestActivity", existing);
 
-      onDemandFetcher.mockResolvedValueOnce([{ id: "a-server", taskId: "t1", text: "from server" }]);
+      onDemandFetcher.mockResolvedValueOnce([
+        { id: "a-server", taskId: "t1", text: "from server" },
+      ]);
 
       const results = await managerWithFetcher.loadCollection("TestActivity", "taskId", "t1");
 

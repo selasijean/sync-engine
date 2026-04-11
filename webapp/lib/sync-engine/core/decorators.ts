@@ -301,10 +301,7 @@ export function ReferenceArray(referenceTo: string) {
 //   public issues: LazyOwnedCollection<Issue>;
 // ---------------------------------------------------------------------------
 
-export function OwnedCollection(
-  referenceTo: string,
-  opts: { idsField: string; lazy?: boolean },
-) {
+export function OwnedCollection(referenceTo: string, opts: { idsField: string; lazy?: boolean }) {
   // Legacy decorator target — no better type exists for prototype manipulation
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return function (target: any, key: string) {

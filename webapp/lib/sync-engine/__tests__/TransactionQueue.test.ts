@@ -159,7 +159,11 @@ describe("TransactionQueue", () => {
       // The flush should only clear IDB entries for the batch it sent,
       // not transactions that arrived after the batch was snapshotted.
       let resolveSender!: (v: unknown) => void;
-      const sender = vi.fn().mockReturnValue(new Promise((res) => { resolveSender = res; }));
+      const sender = vi.fn().mockReturnValue(
+        new Promise((res) => {
+          resolveSender = res;
+        }),
+      );
       queue.setSender(sender);
 
       await queue.enqueueUpdate("t1", "TestTask", { title: { oldValue: "A", newValue: "B" } });
@@ -179,7 +183,11 @@ describe("TransactionQueue", () => {
 
     it("does not wipe IDB entries for transactions enqueued during an in-flight flush (failure)", async () => {
       let resolveSender!: (v: unknown) => void;
-      const sender = vi.fn().mockReturnValue(new Promise((res) => { resolveSender = res; }));
+      const sender = vi.fn().mockReturnValue(
+        new Promise((res) => {
+          resolveSender = res;
+        }),
+      );
       queue.setSender(sender);
 
       const task = new TestTask();

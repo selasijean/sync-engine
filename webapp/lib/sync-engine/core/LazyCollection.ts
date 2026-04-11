@@ -114,7 +114,9 @@ export abstract class LazyCollectionBase<T extends BaseModel = BaseModel> {
 // LazyReferenceCollection — one-to-many queried by foreign key index
 // ---------------------------------------------------------------------------
 
-export class LazyReferenceCollection<T extends BaseModel = BaseModel> extends LazyCollectionBase<T> {
+export class LazyReferenceCollection<
+  T extends BaseModel = BaseModel,
+> extends LazyCollectionBase<T> {
   /** The foreign key on the child model (e.g. "teamId"). */
   readonly inverseKey: string;
 
@@ -247,7 +249,9 @@ export class LazyBackReference<T extends BaseModel = BaseModel> {
       return null;
     }
     const all = pool.getAll(this.referencedModelName) as T[];
-    return all.find((m) => (m as Record<string, unknown>)[this.inverseOf] === this.parentId) ?? null;
+    return (
+      all.find((m) => (m as Record<string, unknown>)[this.inverseOf] === this.parentId) ?? null
+    );
   }
 
   async load(): Promise<T | null> {
