@@ -800,7 +800,7 @@ export class StoreManager {
     BaseModel.storeManager = null;
     this.syncConnection?.disconnect();
     this.transactionQueue.destroy();
-    await this.database.destroy();
+    await this.database.close();
     this.objectPool.clear();
     this.stores.clear();
     this.loadedCollections.clear();

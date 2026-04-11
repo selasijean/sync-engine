@@ -112,6 +112,10 @@ export class MemoryAdapter implements StorageAdapter {
     this.txLog = [];
   }
 
+  async close(): Promise<void> {
+    this.connected = false;
+  }
+
   async destroy(): Promise<void> {
     this.models.clear();
     this.txLog = [];

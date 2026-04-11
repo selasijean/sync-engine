@@ -70,6 +70,16 @@ export interface StorageAdapter {
   getCachedTransactions(): Promise<unknown[]>;
   deleteCachedTransactions(keys: number[]): Promise<void>;
   clearCachedTransactions(): Promise<void>;
+  /**
+   * Close the storage connection without deleting any data.
+   * Called by StoreManager.teardown() during React unmount / cleanup.
+   * Data is preserved for the next page load (enables faster partial bootstrap).
+   */
+  close(): Promise<void>;
+  /**
+   * Close the connection AND permanently delete all persisted data.
+   * Use for explicit logout / factory-reset flows — NOT for routine teardown.
+   */
   destroy(): Promise<void>;
   get isConnected(): boolean;
 }
@@ -112,7 +122,7 @@ export class Database implements StorageAdapter {
       return;
     }
 
-    // Step 3: Schema changed (or first time). Close and reopen with migration.
+    // Step 3: Schema changed. Close and reopen at a higher version to trigger migration.
     const oldVersion = this.db.version;
     const newVersion = (meta.dbVersion ?? oldVersion) + 1;
     this.db.close();
@@ -129,6 +139,19 @@ export class Database implements StorageAdapter {
     }
   }
 
+  /**
+   * IDB blocks schema upgrades and deletions until all open connections close.
+   * onversionchange is the browser's signal to us: "another tab needs you to
+   * let go." Close immediately so the other tab's open/deleteDatabase call
+   * can proceed.
+   */
+  private attachVersionChangeHandler(db: IDBDatabase): void {
+    db.onversionchange = () => {
+      db.close();
+      this.db = null;
+    };
+  }
+
   /** Open DB at its current version (no migration). */
   private openDB(dbName: string): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
@@ -137,7 +160,11 @@ export class Database implements StorageAdapter {
         // First time creating this DB — set up everything from scratch
         this.createAllStores((event.target as IDBOpenDBRequest).result);
       };
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => {
+        const db = request.result;
+        this.attachVersionChangeHandler(db);
+        resolve(db);
+      };
       request.onerror = () => reject(request.error);
     });
   }
@@ -146,6 +173,9 @@ export class Database implements StorageAdapter {
   private openDBWithMigration(dbName: string, version: number): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(dbName, version);
+      request.onblocked = () => {
+        console.warn(`[DB] upgrade to v${version} blocked — another tab has "${dbName}" open`);
+      };
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
         // IMPORTANT: use the upgrade transaction from the event, not db.transaction().
@@ -153,7 +183,11 @@ export class Database implements StorageAdapter {
         const upgradeTx = (event.target as IDBOpenDBRequest).transaction!;
         this.migrateSchema(db, upgradeTx);
       };
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => {
+        const db = request.result;
+        this.attachVersionChangeHandler(db);
+        resolve(db);
+      };
       request.onerror = () => reject(request.error);
     });
   }
@@ -471,9 +505,15 @@ export class Database implements StorageAdapter {
   // Cleanup
   // =========================================================================
 
-  async destroy() {
+  /** Close the IDB connection without deleting any data. */
+  async close(): Promise<void> {
     this.db?.close();
     this.db = null;
+  }
+
+  /** Close the connection AND delete all persisted data for this workspace. */
+  async destroy(): Promise<void> {
+    await this.close();
     if (typeof indexedDB !== "undefined") {
       indexedDB.deleteDatabase(`sync_${this.workspaceId}`);
     }
