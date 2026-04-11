@@ -1,5 +1,14 @@
 # IndexedDB and Local Persistence
 
+The engine's storage layer is pluggable via the `StorageAdapter` interface (`core/Database.ts`). The two built-in implementations are:
+
+- **`Database`** — IndexedDB-backed, for browsers. Handles schema migration, secondary indexes, and offline resilience. This is the default.
+- **`MemoryAdapter`** — in-memory Maps, for Node.js agents and any environment without IndexedDB. No persistence across restarts. See [09-headless-and-agents.md](./09-headless-and-agents.md).
+
+The rest of this doc covers the `Database` implementation. Everything below is specific to the IndexedDB path.
+
+---
+
 IndexedDB is the on-disk layer. It gives the app two things: the ability to survive page refreshes without re-fetching everything from the server, and the ability to work offline. It's managed by the `Database` class (`core/Database.ts`).
 
 ## Database Structure

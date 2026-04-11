@@ -27,7 +27,8 @@ import {
 } from "@sync-engine/decorators";
 import { LoadStrategy } from "@sync-engine/types";
 import type { LazyReferenceCollection } from "@sync-engine/LazyCollection";
-import { dateSerializer, dateDeserializer } from "../models/serializers";
+const dateSerializer = (v: Date) => (v instanceof Date ? v.toISOString() : v);
+const dateDeserializer = (v: unknown) => new Date(v as string);
 import type { StoreManager } from "@sync-engine/StoreManager";
 
 /** Hydrate, make observable, and register a model in the given StoreManager's pool. */

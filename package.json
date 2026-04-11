@@ -1,0 +1,8 @@
+{
+  "name": "sync-engine-monorepo",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "webapp"
+  ]
+}

@@ -1,7 +1,7 @@
 "use client";
 
-import { useSyncEngine, useModels, useUndoRedo } from "@/lib/sync-engine/react";
-import { Issue } from "@/lib/sync-engine/models";
+import { useSyncEngine, useModels, useUndoRedo } from "sync-engine/react";
+import { Issue } from "@/sync/models";
 
 export default function Page() {
   const { sm: store } = useSyncEngine();
@@ -10,15 +10,15 @@ export default function Page() {
 
   const createIssue = () => {
     const issue = new Issue();
-    (issue as any).title = `Issue ${new Date().toLocaleTimeString()}`;
-    (issue as any).priority = Math.floor(Math.random() * 4);
+    issue.title = `Issue ${new Date().toLocaleTimeString()}`;
+    issue.priority = Math.floor(Math.random() * 4);
     issue.save();
   };
 
   const renameIssue = (issue: Issue) => {
-    const title = prompt("New title:", (issue as any).title);
-    if (title) {
-      (issue as any).title = title;
+    const title = prompt("New title:", issue.title);
+    if (title != null && title !== "") {
+      issue.title = title;
       issue.save();
     }
   };
@@ -47,11 +47,11 @@ export default function Page() {
 
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
         {issues.map((issue) => (
-          <li key={(issue as any).id} style={row}>
+          <li key={issue.id} style={row}>
             <div style={{ flex: 1 }}>
-              <span style={{ fontWeight: 500 }}>{(issue as any).title}</span>
+              <span style={{ fontWeight: 500 }}>{issue.title}</span>
               <span style={{ fontSize: 12, color: "#999", marginLeft: 8 }}>
-                P{(issue as any).priority ?? 0}
+                P{issue.priority ?? 0}
               </span>
             </div>
             <div style={{ display: "flex", gap: 6 }}>

@@ -203,6 +203,12 @@ export class StoreManager {
   // ── Bootstrap pipeline ────────────────────────────────────────────────────
 
   async bootstrap(): Promise<void> {
+    if (ModelRegistry.allModels().length === 0) {
+      throw new Error(
+        "No models registered. Import your model files before calling bootstrap().\n" +
+        "Example: import \"@/lib/models\"; // register models"
+      );
+    }
     try {
       this.setPhase(BootstrapPhase.CreatingStores);
       for (const meta of ModelRegistry.allModels()) {

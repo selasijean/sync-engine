@@ -20,8 +20,12 @@ This matters more as agents become real collaborators rather than background scr
 The engine core has zero React and zero browser dependencies. React hooks are a thin optional layer on top. The same `StoreManager` that powers a browser UI runs anywhere TypeScript runs.
 
 ```ts
-import { StoreManager } from "./webapp/lib/sync-engine/core/StoreManager";
+import "reflect-metadata";
+import { StoreManager, MemoryAdapter } from "sync-engine";
 import EventSource from "eventsource"; // npm i eventsource
+
+// Import your models to register them with the engine before bootstrapping
+import "./models";
 
 const sm = new StoreManager({
   workspaceId: "agent-session-1",
@@ -65,7 +69,7 @@ The two pluggable seams — `sseClientFactory` and `storageAdapter` — let the 
 **`MemoryAdapter`** is a full in-memory implementation of the storage interface — no IndexedDB, no filesystem, no globals. It is the right default for any agent that doesn't need state to survive a process restart:
 
 ```ts
-import { MemoryAdapter } from "./core/MemoryAdapter";
+import { StoreManager, MemoryAdapter } from "sync-engine";
 
 const sm = new StoreManager({
   workspaceId: "agent-1",
@@ -143,12 +147,15 @@ One boundary to know: `watch` tracks field changes on a model you already hold. 
 
 ```
 .
-├── webapp/                          Next.js demo
+├── packages/
+│   └── sync-engine/                 Publishable library (npm: sync-engine)
+│       ├── src/
+│       │   ├── core/                Engine internals (14 files)
+│       │   └── react/               SyncProvider + 10 hooks
+│       └── __tests__/               Library tests
+├── webapp/                          Next.js demo app
 │   ├── app/                         Pages + providers
-│   └── lib/sync-engine/             Client sync engine (TypeScript)
-│       ├── core/                    Engine internals (14 files)
-│       ├── models/                  Domain models
-│       └── react/                   SyncProvider + 10 hooks
+│   └── lib/models/                  App-specific domain models
 ├── go/                              Backend (Go + Gin + Bun ORM)
 │   ├── cmd/server/main.go           Entry point (mode-driven)
 │   ├── internal/
@@ -257,8 +264,12 @@ Wrap your app in `<SyncProvider>` once, then use the hooks anywhere inside it.
 
 ### Setup
 
+Model classes register themselves via decorators when their module is first imported. Import your models before `bootstrap()` is called — the engine will throw if the registry is empty.
+
 ```tsx
-import { SyncProvider } from "@/sync-engine/react";
+import "reflect-metadata";
+import { SyncProvider } from "sync-engine/react";
+import "./models"; // registers all model classes (side-effect import)
 
 export default function Providers({ children }) {
   return (
