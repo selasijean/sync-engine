@@ -42,17 +42,38 @@ export function SyncProvider({ config, children, fallback }: {
   const cfgRef = useRef(config);
   cfgRef.current = config;
 
+  // Detect bfcache restores. When a tab is duplicated (or the user navigates
+  // back/forward) the browser may restore the page from its back/forward cache
+  // (bfcache). In that case the JS heap is frozen and thawed — React effects do
+  // NOT re-run, so the StoreManager never bootstraps and the fallback stays
+  // visible forever. Reloading on persisted pageshow breaks out of that state.
   useEffect(() => {
+    const handlePageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) { window.location.reload(); }
+    };
+    window.addEventListener("pageshow", handlePageShow);
+    return () => window.removeEventListener("pageshow", handlePageShow);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
     const sm = new StoreManager({
       ...cfgRef.current,
-      onPhaseChange: (phase, detail) => setStatus({ phase, detail }),
+      onPhaseChange: (phase, detail) => { if (active) setStatus({ phase, detail }); },
     });
     smRef.current = sm;
-    sm.bootstrap().catch(err => setStatus({ phase: BootstrapPhase.Error, error: String(err) }));
-    return () => { sm.teardown(); smRef.current = null; };
+    sm.bootstrap().catch(err => { if (active) setStatus({ phase: BootstrapPhase.Error, error: String(err) }); });
+    return () => {
+      active = false;
+      sm.teardown();
+      smRef.current = null;
+    };
   }, [cfgRef.current.workspaceId]);
 
-  if (smRef.current == null) {return null;}
+  if (smRef.current == null) {
+    return fallback != null ? <>{fallback}</> : null;
+  }
   if (status.phase !== BootstrapPhase.Ready && status.phase !== BootstrapPhase.Error && fallback != null) {
     return <>{fallback}</>;
   }
