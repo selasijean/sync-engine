@@ -317,6 +317,169 @@ describe("StoreManager", () => {
       expect(results.map((r) => r.id)).toContain("a-idb");
       expect(managerWithFetcher.objectPool.getById("TestActivity", "a-idb")).toBeDefined();
     });
+
+    it("merges IDB partial records with additional server records", async () => {
+      // IDB already has one record (e.g. from a prior SSE insert)
+      await managerWithFetcher.database.writeModels("TestActivity", [
+        { id: "a-idb", taskId: "t1", text: "partial" },
+      ]);
+
+      // Server knows about two more that IDB doesn't have yet
+      onDemandFetcher.mockResolvedValueOnce([
+        { id: "a-server-1", taskId: "t1", text: "server 1" },
+        { id: "a-server-2", taskId: "t1", text: "server 2" },
+      ]);
+
+      const results = await managerWithFetcher.loadCollection("TestActivity", "taskId", "t1");
+
+      const ids = results.map((r) => r.id).sort();
+      expect(ids).toEqual(["a-idb", "a-server-1", "a-server-2"]);
+    });
+  });
+
+  // ── loadOne — onDemandFetcher ─────────────────────────────────────────────
+
+  describe("loadOne() with onDemandFetcher", () => {
+    type OnDemandFetcher = (
+      modelName: string,
+      indexKey: string,
+      value: string,
+    ) => Promise<Record<string, unknown>[]>;
+    let onDemandFetcher: MockedFunction<OnDemandFetcher>;
+    let managerWithFetcher: StoreManager;
+
+    beforeEach(async () => {
+      onDemandFetcher = vi.fn().mockResolvedValue([]);
+      managerWithFetcher = new StoreManager({
+        workspaceId: crypto.randomUUID(),
+        bootstrapFetcher: vi.fn(),
+        onDemandFetcher,
+      });
+      await managerWithFetcher.database.connect();
+    });
+
+    afterEach(async () => {
+      await managerWithFetcher.teardown();
+    });
+
+    it("returns model from pool without calling fetcher", async () => {
+      const activity = new TestActivity();
+      activity.hydrate({ id: "a1", taskId: "t1", text: "in pool" });
+      addToPool(managerWithFetcher, "TestActivity", activity);
+
+      const result = await managerWithFetcher.loadOne("TestActivity", "a1");
+
+      expect(result).toBe(activity);
+      expect(onDemandFetcher).not.toHaveBeenCalled();
+    });
+
+    it("calls onDemandFetcher with ('id', id) when not in pool or IDB", async () => {
+      onDemandFetcher.mockResolvedValueOnce([{ id: "a1", taskId: "t1", text: "from server" }]);
+
+      await managerWithFetcher.loadOne("TestActivity", "a1");
+
+      expect(onDemandFetcher).toHaveBeenCalledWith("TestActivity", "id", "a1");
+    });
+
+    it("hydrates the fetched record into the pool", async () => {
+      onDemandFetcher.mockResolvedValueOnce([{ id: "a1", taskId: "t1", text: "fetched" }]);
+
+      const result = await managerWithFetcher.loadOne("TestActivity", "a1");
+
+      expect(result).not.toBeNull();
+      expect(result!.id).toBe("a1");
+      expect(managerWithFetcher.objectPool.getById("TestActivity", "a1")).toBeDefined();
+    });
+
+    it("persists server record to IDB", async () => {
+      onDemandFetcher.mockResolvedValueOnce([{ id: "a1", taskId: "t1", text: "persisted" }]);
+
+      await managerWithFetcher.loadOne("TestActivity", "a1");
+
+      const idbRecord = await managerWithFetcher.database.readModel("TestActivity", "a1");
+      expect(idbRecord).not.toBeNull();
+      expect(idbRecord!.text).toBe("persisted");
+    });
+
+    it("does not call fetcher again on repeat access to the same ID", async () => {
+      onDemandFetcher.mockResolvedValue([{ id: "a1", taskId: "t1", text: "x" }]);
+
+      await managerWithFetcher.loadOne("TestActivity", "a1");
+      await managerWithFetcher.loadOne("TestActivity", "a1");
+
+      expect(onDemandFetcher).toHaveBeenCalledTimes(1);
+    });
+
+    it("calls fetcher separately for different IDs", async () => {
+      await managerWithFetcher.loadOne("TestActivity", "a1");
+      await managerWithFetcher.loadOne("TestActivity", "a2");
+
+      expect(onDemandFetcher).toHaveBeenCalledTimes(2);
+      expect(onDemandFetcher).toHaveBeenCalledWith("TestActivity", "id", "a1");
+      expect(onDemandFetcher).toHaveBeenCalledWith("TestActivity", "id", "a2");
+    });
+
+    it("returns null when fetcher returns empty and record is not in IDB", async () => {
+      onDemandFetcher.mockResolvedValueOnce([]);
+
+      const result = await managerWithFetcher.loadOne("TestActivity", "missing");
+
+      expect(result).toBeNull();
+    });
+
+    it("returns record from IDB without calling fetcher if already fetched once", async () => {
+      onDemandFetcher.mockResolvedValueOnce([{ id: "a1", taskId: "t1", text: "initial" }]);
+      await managerWithFetcher.loadOne("TestActivity", "a1");
+
+      // Evict from pool to simulate memory pressure
+      managerWithFetcher.objectPool.remove("TestActivity", "a1");
+
+      const result = await managerWithFetcher.loadOne("TestActivity", "a1");
+
+      expect(result).not.toBeNull();
+      expect(onDemandFetcher).toHaveBeenCalledTimes(1); // not called again
+    });
+
+    it("skips fetcher when record already exists in IDB from bootstrap or SSE", async () => {
+      // Simulate a record written to IDB before loadOne is ever called (e.g. bootstrap or SSE)
+      await managerWithFetcher.database.writeModels("TestActivity", [
+        { id: "a1", taskId: "t1", text: "pre-seeded" },
+      ]);
+
+      const result = await managerWithFetcher.loadOne("TestActivity", "a1");
+
+      expect(result).not.toBeNull();
+      expect(onDemandFetcher).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── loadOne — no fetcher ───────────────────────────────────────────────────
+
+  describe("loadOne() without onDemandFetcher", () => {
+    it("returns model from pool", async () => {
+      const activity = new TestActivity();
+      activity.hydrate({ id: "a1", taskId: "t1", text: "pooled" });
+      addToPool(manager, "TestActivity", activity);
+
+      const result = await manager.loadOne("TestActivity", "a1");
+
+      expect(result).toBe(activity);
+    });
+
+    it("returns model from IDB if not in pool", async () => {
+      await manager.database.writeModels("TestActivity", [{ id: "a1", taskId: "t1", text: "idb" }]);
+
+      const result = await manager.loadOne("TestActivity", "a1");
+
+      expect(result).not.toBeNull();
+      expect(result!.id).toBe("a1");
+    });
+
+    it("returns null when not in pool or IDB", async () => {
+      const result = await manager.loadOne("TestActivity", "ghost");
+
+      expect(result).toBeNull();
+    });
   });
 
   // ── undo / redo delegation ─────────────────────────────────────────────────

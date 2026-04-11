@@ -171,6 +171,7 @@ export class StoreManager {
    * whether SSE inserts should be hydrated into the pool immediately.
    */
   private loadedCollections = new Set<string>();
+  private loadedIds = new Set<string>();
 
   constructor(config: StoreManagerConfig) {
     this.config = config;
@@ -725,6 +726,20 @@ export class StoreManager {
       this.config.onDemandFetcher != null &&
       !this.loadedCollections.has(key)
     ) {
+      // The server fetch intentionally happens before the IDB read.
+      //
+      // IDB may already contain some records for this collection — written by
+      // prior SSE delta packets — but those are a partial view. There is no way
+      // to tell from IDB alone whether the set is complete. The server is the
+      // only authoritative source for "all records where indexKey = value".
+      //
+      // By fetching first and writing the results into IDB, the subsequent IDB
+      // read below acts as a merge: it picks up both the freshly fetched records
+      // and anything SSE had already written. loadedCollections is then marked,
+      // so future calls skip the server entirely and trust IDB as complete.
+      //
+      // Contrast with loadOne: a single ID lookup is binary — either the record
+      // is in IDB or it isn't — so the server is only consulted as a last resort.
       const serverRecords = await this.config.onDemandFetcher(modelName, indexKey, value);
       if (serverRecords.length > 0) {
         await this.database.writeModels(modelName, serverRecords);
@@ -766,7 +781,19 @@ export class StoreManager {
       return existing as T;
     }
 
-    const record = await this.database.readModel(modelName, id);
+    // Check IDB before hitting the server — server is last resort.
+    let record = await this.database.readModel(modelName, id);
+
+    const idKey = `${modelName}:${id}`;
+    if (record == null && this.config.onDemandFetcher != null && !this.loadedIds.has(idKey)) {
+      const serverRecords = await this.config.onDemandFetcher(modelName, 'id', id);
+      if (serverRecords.length > 0) {
+        await this.database.writeModels(modelName, serverRecords);
+        record = await this.database.readModel(modelName, id);
+      }
+      this.loadedIds.add(idKey);
+    }
+
     if (record == null) {
       return null;
     }
@@ -804,6 +831,7 @@ export class StoreManager {
     this.objectPool.clear();
     this.stores.clear();
     this.loadedCollections.clear();
+    this.loadedIds.clear();
     this.setPhase(BootstrapPhase.Idle);
   }
 }
