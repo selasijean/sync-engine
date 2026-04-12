@@ -2,261 +2,25 @@
 
 A local-first sync engine with a Go backend. Real-time delta streaming via SSE, optimistic mutations, offline support, batch undo/redo.
 
-## Built for the agent world
-
-Most agent frameworks treat state as a solved problem: load context from a database, do work, write results back. Each agent operates on a static snapshot. Two agents working in the same workspace have no shared live model — they coordinate through the server, with all the latency and consistency problems that implies.
-
-This engine takes a different position. **The same sync primitive that powers the browser UI is the agent's working memory.** An agent doesn't query a database — it holds a reference to the same live in-memory model that a human is looking at in a browser tab. When the human edits something, the agent sees it instantly. When the agent acts, the human sees it immediately. The SSE stream is the coordination layer for both.
-
-This matters more as agents become real collaborators rather than background scripts:
-
-- **Real-time awareness**: agents react to changes as they happen — a human reassigns a ticket, an agent's subscription fires before the human's cursor has moved.
-- **Optimistic mutations**: agents don't wait for server round-trips to act. Writes are local-first, queued to the server in the background, broadcast to all consumers. An agent operates at the same speed as a human typing.
-- **Reversibility**: the undo stack works for agent writes too. A human can undo what an agent did. An agent can undo its own previous action. This is foundational for human-in-the-loop workflows where trust is still being established.
-- **Multi-agent coordination without a message bus**: agents sharing a `StoreManager` see each other's writes instantly with no protocol overhead. Agents with separate `StoreManager` instances converge via the SSE stream. Either way, there is no separate coordination layer to design.
-
-### Running an agent
-
-The engine core has zero React and zero browser dependencies. React hooks are a thin optional layer on top. The same `StoreManager` that powers a browser UI runs anywhere TypeScript runs.
-
-```ts
-import "reflect-metadata";
-import { StoreManager, MemoryAdapter } from "sync-engine";
-import EventSource from "eventsource"; // npm i eventsource
-
-// Import your models to register them with the engine before bootstrapping
-import "./models";
-
-const sm = new StoreManager({
-  workspaceId: "agent-session-1",
-  bootstrapFetcher: async (type, since) => {
-    const res = await fetch(`http://localhost:8080/api/bootstrap?type=${type}&since=${since ?? 0}`);
-    return res.json();
-  },
-  transactionSender: async (batch) => {
-    const res = await fetch("http://localhost:8080/api/transactions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(batch),
-    });
-    return res.json();
-  },
-  syncUrl: "http://localhost:8081/api/events",
-  sseClientFactory: (url) => new EventSource(url), // swap in Node.js-compatible SSE
-});
-
-await sm.bootstrap();
-
-// The full world state, live
-const issues = sm.objectPool.getAll("Issue");
-
-// Write — optimistic locally, queued to server, broadcast to every connected client and agent
-issues[0].title = "Fixed by agent";
-issues[0].save();
-```
-
-### Execution environments
-
-The two pluggable seams — `sseClientFactory` and `storageAdapter` — let the engine run in any environment:
-
-| Environment | `sseClientFactory` | `storageAdapter` |
-|---|---|---|
-| Browser | default (`EventSource`) | default (IndexedDB) |
-| Node.js (long-running) | `eventsource` npm package | `MemoryAdapter` or custom |
-| Serverless / edge | fetch-based SSE reader | `MemoryAdapter` |
-| CLI tool | `eventsource` npm package | `MemoryAdapter` |
-
-**`MemoryAdapter`** is a full in-memory implementation of the storage interface — no IndexedDB, no filesystem, no globals. It is the right default for any agent that doesn't need state to survive a process restart:
-
-```ts
-import { StoreManager, MemoryAdapter } from "sync-engine";
-
-const sm = new StoreManager({
-  workspaceId: "agent-1",
-  bootstrapFetcher: ...,
-  storageAdapter: new MemoryAdapter(),
-  sseClientFactory: (url) => new EventSource(url),
-});
-```
-
-For agents that do need durability — resuming a long task after a restart, replaying pending transactions after a crash — implement `StorageAdapter` with SQLite, Redis, or any key-value store. The interface is small (12 methods) and the contract is straightforward.
-
-### Isolated vs shared agent state
-
-**Isolated** — each agent creates its own `StoreManager`. Independent working memory. All instances converge via the SSE stream: a write by one agent arrives at every other in real time. Use this for parallel agents working independently on different parts of a problem.
-
-**Shared** — multiple agents share one `StoreManager` instance. Single pool, one SSE connection. Writes from any agent are immediately visible to all others without a server round-trip. Use this for tightly-collaborating agents, or for an agent running alongside a UI that needs to see and react to human edits instantly.
-
-### Reactivity in headless mode
-
-React's observer model doesn't exist in Node.js. The engine exposes two callback APIs that fill that role.
-
-**`objectPool.subscribe`** — fires whenever any model of a given type is added, updated, or removed. This is the primary way an agent reacts to SSE deltas arriving from the server:
-
-```ts
-const unsubscribe = sm.objectPool.subscribe("Issue", () => {
-  const issues = sm.objectPool.getAll("Issue");
-  // re-evaluate state, make decisions, write back
-});
-
-// Release when the agent shuts down
-unsubscribe();
-```
-
-This is the agent's core event loop. The SSE stream delivers a delta → the pool updates → the subscription fires → the agent acts → the write is queued → the server broadcasts → all other agents and browser clients update. No polling, no manual diffing.
-
-**`collection.subscribe`** — fires when a specific lazy relationship loads or receives new members:
-
-```ts
-const team = sm.objectPool.getById("Team", teamId) as Team;
-const unsubscribe = team.issues.subscribe(() => {
-  // team.issues.items is now current
-});
-```
-
-Both return an unsubscribe function. Call it on shutdown. Both are plain callbacks — no MobX, no browser globals.
-
-**`model.watch()` — per-property reactivity**
-
-For field-level granularity — fire only when a specific property changes — use `watch` directly on the model:
-
-```ts
-const issue = sm.objectPool.getById("Issue", id) as Issue;
-
-const unwatch = issue.watch(
-  (m) => m.priority,
-  (newValue, oldValue) => console.log("priority changed:", oldValue, "→", newValue),
-);
-
-// Release when done
-unwatch();
-```
-
-The selector can read any combination of fields — only the return value is compared, so derived conditions work too:
-
-```ts
-issue.watch(
-  (m) => m.status === "done",
-  (isDone) => console.log("completion changed:", isDone),
-);
-```
-
-One boundary to know: `watch` tracks field changes on a model you already hold. It does not know when the pool gains a new model. For reacting to new arrivals from SSE deltas, use `objectPool.subscribe`. For reacting to field changes on a model you already hold, use `watch`.
-
-## Structure
-
-```
-.
-├── packages/
-│   └── sync-engine/                 Publishable library (npm: sync-engine)
-│       ├── src/
-│       │   ├── core/                Engine internals (14 files)
-│       │   └── react/               SyncProvider + 10 hooks
-│       └── __tests__/               Library tests
-├── webapp/                          Next.js demo app
-│   ├── app/                         Pages + providers
-│   └── lib/models/                  App-specific domain models
-├── go/                              Backend (Go + Gin + Bun ORM)
-│   ├── cmd/server/main.go           Entry point (mode-driven)
-│   ├── internal/
-│   │   ├── config/                  SERVICE_MODE: all | stateless | stateful
-│   │   ├── database/                Bun models, changelog queries, registry
-│   │   ├── sync/                    Broadcaster (fan-out) + Listener (LISTEN/NOTIFY)
-│   │   ├── handler/                 Bootstrap, transactions, SSE events
-│   │   └── types/                   API wire types
-│   └── migrations/                  SQL schema + trigger
-├── docker-compose.yml               Postgres + API + SSE
-└── Makefile
-```
-
 ## Quick start
 
 **Prerequisites:** Docker, Go 1.22+, Node 18+, Make.
 
 ```bash
-# 1. Generate go.sum (once after cloning — required before Docker build)
-make go-tidy
-
-# 2. Start Postgres + both Go services (API on :8080, SSE on :8081)
-make start-backend
-
-# 3. Install webapp dependencies (once)
-make install-webapp
-
-# 4. Start the Next.js dev server
-make run-webapp
+make go-tidy        # generate go.sum (once after cloning)
+make start-backend  # Postgres + Go services (API :8080, SSE :8081)
+make install-webapp # install webapp deps (once)
+make run-webapp     # Next.js dev server
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in two browser tabs. Create an issue in one — it appears in the other instantly.
-
-No environment setup needed. The webapp defaults to `http://localhost:8080` (API) and `http://localhost:8081` (SSE).
-
-### Verify the backend is up
+Open [http://localhost:3000](http://localhost:3000) in two tabs to see sync in action.
 
 ```bash
 make ps           # show running containers
 make logs         # tail API + SSE logs
-curl http://localhost:8080/api/health
-curl http://localhost:8081/api/health
+make stop-backend # stop containers, keep Postgres data
+make clean        # stop containers + wipe Postgres volume
 ```
-
-### Tear down
-
-```bash
-make stop-backend   # stop containers, keep Postgres data
-make clean          # stop containers + wipe Postgres volume
-```
-
-## How it works
-
-One Go binary, two service modes controlled by `SERVICE_MODE`:
-
-**api** (stateless, `:8080`) — `GET /api/bootstrap` and `POST /api/transactions`. No persistent state. Scale horizontally behind a load balancer.
-
-**sse** (stateful, `:8081`) — `GET /api/events`. Runs a Postgres `LISTEN/NOTIFY` goroutine and holds SSE connections open. Each instance independently receives every notification from Postgres.
-
-### Write flow
-
-1. Client: `issue.title = "x"; issue.save()`
-2. `TransactionQueue` batches and POSTs to the API service
-3. Go handler (Bun ORM): `BEGIN` → model table write → changelog append → `COMMIT`
-4. Postgres trigger: `pg_notify('changelog_changes', '5205')`
-5. SSE service's listener receives the notification, queries the row via Bun
-6. Broadcaster fans out to connected clients (sync group filtered)
-7. Browser `EventSource` receives the event
-8. `SyncConnection` feeds it into the 7-step delta pipeline
-9. `ObjectPool` updates → React re-renders
-
-### Data format
-
-Bun ORM handles the snake_case ↔ camelCase mapping transparently:
-- Postgres columns: `team_id`, `created_at`, `sort_order`
-- Go structs: `TeamID`, `CreatedAt`, `SortOrder` (bun tags map to snake_case)
-- JSON output: `teamId`, `createdAt`, `sortOrder` (json tags map to camelCase)
-
-No manual transformation anywhere in the pipeline.
-
-## Endpoints
-
-| Endpoint | Service | Purpose |
-|---|---|---|
-| `GET /api/bootstrap` | api | Full or partial bootstrap |
-| `POST /api/transactions` | api | Client mutations |
-| `GET /api/events` | sse | SSE stream (catch-up + live) |
-| `GET /api/health` | both | Status check |
-| `GET /api/stats` | sse | Connected client count |
-
-## Local dev (single process)
-
-Run everything in one Go process without Docker:
-
-```bash
-cd go
-go mod tidy
-SERVICE_MODE=all DATABASE_URL=postgres://postgres:password@localhost:5432/syncdb?sslmode=disable go run cmd/server/main.go
-```
-
-Set both `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_SSE_URL` to `http://localhost:8080` in the webapp.
 
 ## React hooks
 
@@ -264,12 +28,12 @@ Wrap your app in `<SyncProvider>` once, then use the hooks anywhere inside it.
 
 ### Setup
 
-Model classes register themselves via decorators when their module is first imported. Import your models before `bootstrap()` is called — the engine will throw if the registry is empty.
+Import your models before `bootstrap()` is called — model classes register themselves via decorators on import.
 
 ```tsx
 import "reflect-metadata";
 import { SyncProvider } from "sync-engine/react";
-import "./models"; // registers all model classes (side-effect import)
+import "./models"; // side-effect import — registers model classes
 
 export default function Providers({ children }) {
   return (
@@ -300,68 +64,305 @@ export default function Providers({ children }) {
 ### Reading data
 
 ```tsx
-// All instances of a model — re-renders when any are added/removed
-const issues = useModels<Issue>("Issue");
-
-// Single model by ID — re-renders when pool changes for this type
-const issue = useModel<Issue>("Issue", issueId);
-
-// Bootstrap phase (for loading states)
-const { phase } = useBootstrapStatus();
+const issues = useModels<Issue>("Issue");          // all instances, re-renders on add/remove
+const issue = useModel<Issue>("Issue", issueId);   // single by ID
+const { phase } = useBootstrapStatus();            // loading state
 ```
 
 ### Writing data
 
 ```tsx
-// Optimistic update — saves locally and queues for server
+// Optimistic update
 issue.title = "New title";
 issue.save();
 
-// Group changes into one undoable action
+// Batch — grouped into one undoable action
 const batch = useBatch();
 batch(() => {
-  issue.title = "New title";
-  issue.save();
-  issue.priority = 1;
-  issue.save();
+  issue.title = "New title"; issue.save();
+  issue.priority = 1; issue.save();
 });
 
-// Async batch — works with lazy loads inside
+// Async batch
 batch(async () => {
   const comments = await issue.comments.load();
   comments.forEach(c => { c.text = "resolved"; c.save(); });
 });
 
-// Undo / redo
 const { undo, redo, canUndo, canRedo } = useUndoRedo();
 ```
 
 ### Lazy collections
 
 ```tsx
-// @ReferenceCollection — child holds the FK (e.g. issue.teamId)
-const team = useModel<Team>("Team", teamId);
-const { items: issues, isLoading } = useCollection(team?.issues);
-
-// @OwnedCollection — parent holds the IDs array (e.g. team.memberIds)
-const { items: members } = useCollection(team?.members);
-
-// @BackReference — single inverse model
-const { value: favorite } = useBackRef(issue?.favorite);
+const { items: issues, isLoading } = useCollection(team?.issues);   // @ReferenceCollection
+const { items: members } = useCollection(team?.members);             // @OwnedCollection
+const { value: favorite } = useBackRef(issue?.favorite);             // @BackReference
 ```
 
 ### Lazy single models
 
 ```tsx
-// For Partial/Lazy models not loaded at bootstrap (e.g. DocumentContent)
-const { value: content, isLoading } = useLazyRef<DocumentContent>(
-  "DocumentContent",
-  issue?.id,
-);
+const { value: content, isLoading } = useLazyRef<DocumentContent>("DocumentContent", issue?.id);
 ```
+
+## Structure
+
+```
+.
+├── packages/
+│   └── sync-engine/                 Publishable library (npm: sync-engine)
+│       ├── src/
+│       │   ├── core/                Engine internals
+│       │   └── react/               SyncProvider + hooks
+│       └── __tests__/
+├── webapp/                          Next.js demo app
+│   ├── app/
+│   └── lib/models/                  Domain models
+├── go/                              Backend (Go + Gin + Bun ORM)
+│   ├── cmd/server/main.go
+│   ├── internal/
+│   │   ├── config/                  SERVICE_MODE: all | stateless | stateful
+│   │   ├── database/                Bun models, changelog queries
+│   │   ├── sync/                    Broadcaster + Listener (LISTEN/NOTIFY)
+│   │   ├── handler/                 Bootstrap, transactions, SSE
+│   │   └── types/
+│   └── migrations/
+├── docker-compose.yml
+└── Makefile
+```
+
+## How it works
+
+One Go binary, two service modes controlled by `SERVICE_MODE`:
+
+**api** (stateless, `:8080`) — `GET /api/bootstrap` and `POST /api/transactions`. Scales horizontally.
+
+**sse** (stateful, `:8081`) — `GET /api/events`. Holds SSE connections and runs a Postgres `LISTEN/NOTIFY` goroutine.
+
+### Write flow
+
+1. `issue.title = "x"; issue.save()`
+2. `TransactionQueue` batches and POSTs to the API
+3. Go: `BEGIN` → model write → changelog append → `COMMIT`
+4. Postgres trigger fires `pg_notify`
+5. SSE listener queries the row, broadcaster fans out to connected clients
+6. `EventSource` receives the event, delta pipeline runs, `ObjectPool` updates → re-render
+
+### Data format
+
+Bun ORM maps transparently: `team_id` (Postgres) → `TeamID` (Go struct) → `teamId` (JSON). No manual transformation.
+
+## Protocol
+
+The client speaks a simple protocol. You can replace the Go backend with any server that implements these three endpoints.
+
+### `GET /api/bootstrap`
+
+Query params: `type` (model name), `since` (syncId, optional). Returns all records of that type, or only those updated since `since`.
+
+```json
+{
+  "lastSyncId": 5205,
+  "subscribedSyncGroups": ["workspace-abc"],
+  "models": {
+    "Issue": [ { "id": "...", "title": "...", "teamId": "..." } ],
+    "Team":  [ { "id": "...", "name": "..." } ]
+  },
+  "backendDatabaseVersion": 1
+}
+```
+
+The client calls bootstrap once per model type on startup, then subscribes to the SSE stream from `lastSyncId` forward.
+
+### `POST /api/transactions`
+
+```json
+{
+  "transactions": [
+    {
+      "id": "uuid",
+      "action": "I",
+      "modelName": "Issue",
+      "modelId": "uuid",
+      "data": { "id": "...", "title": "...", "teamId": "..." }
+    },
+    {
+      "id": "uuid",
+      "action": "U",
+      "modelName": "Issue",
+      "modelId": "uuid",
+      "changes": {
+        "title": { "oldValue": "Old", "newValue": "New" }
+      }
+    },
+    {
+      "id": "uuid",
+      "action": "D",
+      "modelName": "Issue",
+      "modelId": "uuid"
+    }
+  ]
+}
+```
+
+Actions: `I` (insert), `U` (update), `D` (delete), `A` (archive). Updates include old+new per field so the client can rebase optimistic changes. Response:
+
+```json
+{ "success": true, "lastSyncId": 5206 }
+```
+
+The returned `lastSyncId` is the syncId assigned to these writes. The client uses it to mark the transactions as fully synced once the matching delta arrives over SSE.
+
+### `GET /api/events` (SSE)
+
+Each message is a JSON-encoded delta packet:
+
+```json
+{
+  "syncActions": [
+    {
+      "id": 5206,
+      "modelName": "Issue",
+      "modelId": "uuid",
+      "action": "U",
+      "data": { "title": "New title", "priority": 1 }
+    }
+  ],
+  "addedSyncGroups": [],
+  "removedSyncGroups": []
+}
+```
+
+`id` is a monotonic syncId. The client passes `?since=<lastSyncId>` on connect to catch up on missed events. `addedSyncGroups`/`removedSyncGroups` tell the client to bootstrap newly-scoped models.
+
+### Sync groups
+
+Sync groups control which clients receive which events. Every write is tagged with one or more group labels (sent by the client as `X-Sync-Groups: workspace-abc`). The server only delivers that event to SSE connections subscribed to at least one of the same labels.
+
+In practice, a workspace ID is the most common use — users only receive events for their own workspace. But the labels are arbitrary strings, so you can scope as broadly or narrowly as you need.
+
+The client declares its groups at connect time via the `syncGroups` query param on both `/api/bootstrap` and `/api/events`. If a user is added to a new group mid-session, the server sends a delta packet with `addedSyncGroups`, the client bootstraps the new data, and starts receiving events for it — no reconnect needed. Supply a `syncGroupFetcher` to handle this:
+
+```ts
+const sm = new StoreManager({
+  // ...
+  syncGroupFetcher: async (addedGroups) => {
+    const res = await fetch(`/api/bootstrap?syncGroups=${addedGroups.join(",")}`);
+    return res.json();
+  },
+});
+```
+
+If your app has a single fixed scope per session, you can omit `syncGroupFetcher`.
+
+## Endpoints
+
+| Endpoint | Service | Purpose |
+|---|---|---|
+| `GET /api/bootstrap` | api | Full or partial bootstrap |
+| `POST /api/transactions` | api | Client mutations |
+| `GET /api/events` | sse | SSE stream |
+| `GET /api/health` | both | Status check |
+| `GET /api/stats` | sse | Connected client count |
+
+## Local dev (single process)
+
+```bash
+cd go
+go mod tidy
+SERVICE_MODE=all DATABASE_URL=postgres://postgres:password@localhost:5432/syncdb?sslmode=disable go run cmd/server/main.go
+```
+
+Set both `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_SSE_URL` to `http://localhost:8080`.
+
+## Headless / agent usage
+
+Most agent patterns follow a request/response loop: fetch context, do work, write back. The agent operates on a snapshot and has no awareness of changes happening between steps.
+
+Running an agent on top of this engine gives it a live model instead — the same in-memory state a browser tab holds, kept current via SSE. Changes from humans or other agents arrive in real time without polling, and writes propagate back to every connected client immediately.
+
+The engine core has no React or browser dependencies. The same `StoreManager` that powers the UI runs in Node.js.
+
+```ts
+import "reflect-metadata";
+import { StoreManager, MemoryAdapter } from "sync-engine";
+import EventSource from "eventsource";
+import "./models";
+
+const sm = new StoreManager({
+  workspaceId: "agent-1",
+  bootstrapFetcher: async (type, since) => {
+    const res = await fetch(`http://localhost:8080/api/bootstrap?type=${type}&since=${since ?? 0}`);
+    return res.json();
+  },
+  transactionSender: async (batch) => {
+    const res = await fetch("http://localhost:8080/api/transactions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(batch),
+    });
+    return res.json();
+  },
+  syncUrl: "http://localhost:8081/api/events",
+  sseClientFactory: (url) => new EventSource(url),
+  storageAdapter: new MemoryAdapter(),
+});
+
+await sm.bootstrap();
+```
+
+### Reactivity
+
+**`objectPool.subscribe`** — fires when any model of a given type is added, updated, or removed:
+
+```ts
+const unsubscribe = sm.objectPool.subscribe("Issue", () => {
+  const issues = sm.objectPool.getAll("Issue");
+  // react to changes, write back
+});
+```
+
+**`collection.subscribe`** — fires when a lazy relationship loads or changes:
+
+```ts
+const unsubscribe = team.issues.subscribe(() => {
+  // team.issues.items is current
+});
+```
+
+**`model.watch()`** — fires when a specific field (or derived value) changes:
+
+```ts
+const unwatch = issue.watch(
+  (m) => m.priority,
+  (newValue, oldValue) => console.log(oldValue, "→", newValue),
+);
+
+// derived selector works too
+issue.watch((m) => m.status === "done", (isDone) => { ... });
+```
+
+Use `objectPool.subscribe` to react to new models arriving from the SSE stream. Use `watch` for field-level changes on a model you already hold.
+
+### Execution environments
+
+| Environment | `sseClientFactory` | `storageAdapter` |
+|---|---|---|
+| Browser | default (`EventSource`) | default (IndexedDB) |
+| Node.js | `eventsource` package | `MemoryAdapter` or custom |
+| Serverless / edge | fetch-based SSE reader | `MemoryAdapter` |
+
+For agents that need durability across restarts, implement `StorageAdapter` with SQLite, Redis, or any key-value store (12 methods).
+
+### Isolated vs shared agent state
+
+**Isolated** — each agent has its own `StoreManager`. All instances converge via SSE. The undo stack is local: agent writes arrive in the browser as SSE deltas and never touch the browser's undo stack. If you need human-reversible agent writes, build it at the application layer (e.g. the agent writes an `AgentAction` record and the UI has a revert button).
+
+**Shared** — multiple agents share one `StoreManager` instance (only possible in the same process — web worker, VS Code extension, etc.). Writes are immediately visible across all agents without a server round-trip, and agent writes go onto the same undo stack as human writes.
 
 ## Tech stack
 
 - **Client**: TypeScript, MobX, IndexedDB, EventSource (SSE)
-- **Server**: Go, Gin, Bun ORM, Postgres (LISTEN/NOTIFY), pgx (for listener)
+- **Server**: Go, Gin, Bun ORM, Postgres (LISTEN/NOTIFY), pgx
 - **Protocol**: Append-only changelog, monotonic syncId, sync group filtering
