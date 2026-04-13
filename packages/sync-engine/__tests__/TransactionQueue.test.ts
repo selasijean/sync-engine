@@ -6,10 +6,12 @@ import { TransactionState } from "@sync-engine/types";
 import { BaseModel } from "@sync-engine/BaseModel";
 import { TestTask } from "./fixtures";
 
-// Helper: directly invoke the private flush() method and await it.
+// flush() is private and normally fires after a 50ms debounce timer. Tests need
+// to trigger it immediately and await its completion. We cast through unknown to
+// access it without an `any` cast (a direct intersection fails because TypeScript
+// treats private-in-one-constituent intersections as `never`).
 const flush = (queue: TransactionQueue) =>
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (queue as any).flush() as Promise<void>;
+  (queue as unknown as { flush(): Promise<void> }).flush();
 
 let db: Database;
 let pool: ObjectPool;
