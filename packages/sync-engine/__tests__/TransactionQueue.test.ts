@@ -8,7 +8,8 @@ import { TestTask } from "./fixtures";
 
 // Helper: directly invoke the private flush() method and await it.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const flush = (queue: TransactionQueue) => (queue as any).flush() as Promise<void>;
+const flush = (queue: TransactionQueue) =>
+  (queue as any).flush() as Promise<void>;
 
 let db: Database;
 let pool: ObjectPool;
@@ -84,7 +85,9 @@ describe("TransactionQueue", () => {
 
   describe("flush", () => {
     it("sends pending transactions via sender", async () => {
-      const sender = vi.fn().mockResolvedValue({ success: true, lastSyncId: 1 });
+      const sender = vi
+        .fn()
+        .mockResolvedValue({ success: true, lastSyncId: 1 });
       queue.setSender(sender);
 
       await queue.enqueueUpdate("t1", "TestTask", {
@@ -97,7 +100,9 @@ describe("TransactionQueue", () => {
     });
 
     it("moves transactions to awaitingSync on success", async () => {
-      const sender = vi.fn().mockResolvedValue({ success: true, lastSyncId: 5 });
+      const sender = vi
+        .fn()
+        .mockResolvedValue({ success: true, lastSyncId: 5 });
       queue.setSender(sender);
 
       await queue.enqueueUpdate("t1", "TestTask", {
@@ -110,7 +115,9 @@ describe("TransactionQueue", () => {
     });
 
     it("clears IDB cache on successful flush", async () => {
-      const sender = vi.fn().mockResolvedValue({ success: true, lastSyncId: 1 });
+      const sender = vi
+        .fn()
+        .mockResolvedValue({ success: true, lastSyncId: 1 });
       queue.setSender(sender);
 
       await queue.enqueueUpdate("t1", "TestTask", {
@@ -128,7 +135,9 @@ describe("TransactionQueue", () => {
       task.makeModelObservable();
       pool.put("TestTask", task);
 
-      const sender = vi.fn().mockResolvedValue({ success: false, lastSyncId: 0 });
+      const sender = vi
+        .fn()
+        .mockResolvedValue({ success: false, lastSyncId: 0 });
       queue.setSender(sender);
 
       await queue.enqueueUpdate("t1", "TestTask", {
@@ -166,11 +175,15 @@ describe("TransactionQueue", () => {
       );
       queue.setSender(sender);
 
-      await queue.enqueueUpdate("t1", "TestTask", { title: { oldValue: "A", newValue: "B" } });
+      await queue.enqueueUpdate("t1", "TestTask", {
+        title: { oldValue: "A", newValue: "B" },
+      });
       const flushPromise = flush(queue); // starts but does not await — sender is paused
 
       // Tx C arrives while the flush is in-flight
-      await queue.enqueueUpdate("t2", "TestTask", { title: { oldValue: "C", newValue: "D" } });
+      await queue.enqueueUpdate("t2", "TestTask", {
+        title: { oldValue: "C", newValue: "D" },
+      });
 
       resolveSender({ success: true, lastSyncId: 1 });
       await flushPromise;
@@ -195,11 +208,15 @@ describe("TransactionQueue", () => {
       task.makeModelObservable();
       pool.put("TestTask", task);
 
-      await queue.enqueueUpdate("t1", "TestTask", { title: { oldValue: "Old", newValue: "New" } });
+      await queue.enqueueUpdate("t1", "TestTask", {
+        title: { oldValue: "Old", newValue: "New" },
+      });
       const flushPromise = flush(queue);
 
       // Tx C arrives while the flush is in-flight
-      await queue.enqueueUpdate("t2", "TestTask", { title: { oldValue: "C", newValue: "D" } });
+      await queue.enqueueUpdate("t2", "TestTask", {
+        title: { oldValue: "C", newValue: "D" },
+      });
 
       resolveSender({ success: false, lastSyncId: 0 });
       await flushPromise;
@@ -211,7 +228,9 @@ describe("TransactionQueue", () => {
     });
 
     it("does not call sender when there are no pending transactions", async () => {
-      const sender = vi.fn().mockResolvedValue({ success: true, lastSyncId: 1 });
+      const sender = vi
+        .fn()
+        .mockResolvedValue({ success: true, lastSyncId: 1 });
       queue.setSender(sender);
 
       await flush(queue);
@@ -219,11 +238,17 @@ describe("TransactionQueue", () => {
     });
 
     it("batches multiple pending transactions into one sender call", async () => {
-      const sender = vi.fn().mockResolvedValue({ success: true, lastSyncId: 1 });
+      const sender = vi
+        .fn()
+        .mockResolvedValue({ success: true, lastSyncId: 1 });
       queue.setSender(sender);
 
-      await queue.enqueueUpdate("t1", "TestTask", { title: { oldValue: "A", newValue: "B" } });
-      await queue.enqueueUpdate("t2", "TestTask", { title: { oldValue: "C", newValue: "D" } });
+      await queue.enqueueUpdate("t1", "TestTask", {
+        title: { oldValue: "A", newValue: "B" },
+      });
+      await queue.enqueueUpdate("t2", "TestTask", {
+        title: { oldValue: "C", newValue: "D" },
+      });
       await flush(queue);
 
       expect(sender).toHaveBeenCalledOnce();
@@ -236,7 +261,9 @@ describe("TransactionQueue", () => {
 
   describe("resolveBySync()", () => {
     it("resolves transactions whose syncId requirement is met", async () => {
-      const sender = vi.fn().mockResolvedValue({ success: true, lastSyncId: 10 });
+      const sender = vi
+        .fn()
+        .mockResolvedValue({ success: true, lastSyncId: 10 });
       queue.setSender(sender);
 
       await queue.enqueueUpdate("t1", "TestTask", {
@@ -252,7 +279,9 @@ describe("TransactionQueue", () => {
     });
 
     it("does NOT resolve transactions when syncId is too low", async () => {
-      const sender = vi.fn().mockResolvedValue({ success: true, lastSyncId: 10 });
+      const sender = vi
+        .fn()
+        .mockResolvedValue({ success: true, lastSyncId: 10 });
       queue.setSender(sender);
 
       await queue.enqueueUpdate("t1", "TestTask", {
@@ -266,11 +295,17 @@ describe("TransactionQueue", () => {
     });
 
     it("resolves multiple transactions with a single syncId", async () => {
-      const sender = vi.fn().mockResolvedValue({ success: true, lastSyncId: 7 });
+      const sender = vi
+        .fn()
+        .mockResolvedValue({ success: true, lastSyncId: 7 });
       queue.setSender(sender);
 
-      await queue.enqueueUpdate("t1", "TestTask", { title: { oldValue: "A", newValue: "B" } });
-      await queue.enqueueUpdate("t2", "TestTask", { title: { oldValue: "C", newValue: "D" } });
+      await queue.enqueueUpdate("t1", "TestTask", {
+        title: { oldValue: "A", newValue: "B" },
+      });
+      await queue.enqueueUpdate("t2", "TestTask", {
+        title: { oldValue: "C", newValue: "D" },
+      });
       await flush(queue);
 
       const resolved = queue.resolveBySync(7);
@@ -297,8 +332,12 @@ describe("TransactionQueue", () => {
 
     it("both transactions are pending after batch ends", async () => {
       const batchId = queue.beginBatch();
-      await queue.enqueueUpdate("t1", "TestTask", { title: { oldValue: "A", newValue: "B" } });
-      await queue.enqueueUpdate("t2", "TestTask", { title: { oldValue: "C", newValue: "D" } });
+      await queue.enqueueUpdate("t1", "TestTask", {
+        title: { oldValue: "A", newValue: "B" },
+      });
+      await queue.enqueueUpdate("t2", "TestTask", {
+        title: { oldValue: "C", newValue: "D" },
+      });
       queue.endBatch(batchId);
       expect(queue.pendingCount).toBe(2);
     });
@@ -469,7 +508,9 @@ describe("TransactionQueue", () => {
       await queue.enqueueUpdate("ghost", "TestTask", {
         title: { oldValue: "A", newValue: "B" },
       });
-      expect(() => queue.rebaseAll("ghost", "TestTask", { title: "X" })).not.toThrow();
+      expect(() =>
+        queue.rebaseAll("ghost", "TestTask", { title: "X" }),
+      ).not.toThrow();
     });
   });
 });

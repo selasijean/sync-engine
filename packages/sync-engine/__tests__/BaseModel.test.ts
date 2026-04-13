@@ -1,6 +1,11 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { BaseModel } from "@sync-engine/BaseModel";
-import { TestTask, TestProject, hydrateObservable, makeFakeStoreManager } from "./fixtures";
+import {
+  TestTask,
+  TestProject,
+  hydrateObservable,
+  makeFakeStoreManager,
+} from "./fixtures";
 
 // We need BaseModel.storeManager to be null between tests so auto-commit
 // doesn't fire into a stale StoreManager.
@@ -14,7 +19,9 @@ describe("BaseModel", () => {
   describe("construction", () => {
     it("assigns a UUID id on construction", () => {
       const task = new TestTask();
-      expect(task.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+      expect(task.id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      );
     });
 
     it("each instance gets a unique id", () => {
@@ -166,7 +173,9 @@ describe("BaseModel", () => {
       it("calls commitCreate via save()", () => {
         let created: BaseModel | null = null;
         BaseModel.storeManager = makeFakeStoreManager({
-          commitCreate: (m) => { created = m; },
+          commitCreate: (m) => {
+            created = m;
+          },
         });
 
         const task = new TestTask();
@@ -179,7 +188,9 @@ describe("BaseModel", () => {
       it("assigns @Property fields and sends changes to server", () => {
         const commits: unknown[] = [];
         BaseModel.storeManager = makeFakeStoreManager({
-          commitUpdate: (_id, _name, changes) => { commits.push(changes); },
+          commitUpdate: (_id, _name, changes) => {
+            commits.push(changes);
+          },
         });
 
         const task = new TestTask();
@@ -225,10 +236,15 @@ describe("BaseModel", () => {
       });
 
       it("batches all field assignments into a single commitUpdate with correct values", () => {
-        type ChangeMap = Record<string, { oldValue: unknown; newValue: unknown }>;
+        type ChangeMap = Record<
+          string,
+          { oldValue: unknown; newValue: unknown }
+        >;
         const commits: ChangeMap[] = [];
         BaseModel.storeManager = makeFakeStoreManager({
-          commitUpdate: (_id, _name, changes) => { commits.push(changes as ChangeMap); },
+          commitUpdate: (_id, _name, changes) => {
+            commits.push(changes as ChangeMap);
+          },
         });
 
         const task = new TestTask();
@@ -236,7 +252,10 @@ describe("BaseModel", () => {
 
         task.update({ title: "New", done: true });
         expect(commits).toHaveLength(1);
-        expect(commits[0]["title"]).toEqual({ oldValue: "Old", newValue: "New" });
+        expect(commits[0]["title"]).toEqual({
+          oldValue: "Old",
+          newValue: "New",
+        });
         expect(commits[0]["done"]).toEqual({ oldValue: false, newValue: true });
       });
     });
@@ -291,7 +310,10 @@ describe("BaseModel", () => {
       task.makeModelObservable();
 
       // Simulate pool being wired as the store
-      const fakeStore = { getById: (_name: string, _id: string) => project, put: () => {} };
+      const fakeStore = {
+        getById: (_name: string, _id: string) => project,
+        put: () => {},
+      };
       task.store = fakeStore;
 
       expect(task.project).toBe(project);

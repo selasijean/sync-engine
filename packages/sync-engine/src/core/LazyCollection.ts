@@ -128,7 +128,10 @@ export class LazyReferenceCollection<
   private partialIndexValues: Array<{ key: string; value: string }> = [];
 
   private loader:
-    | ((modelName: string, queries: Array<{ key: string; value: string }>) => Promise<T[]>)
+    | ((
+        modelName: string,
+        queries: Array<{ key: string; value: string }>,
+      ) => Promise<T[]>)
     | null = null;
 
   constructor(referencedModelName: string, inverseKey: string) {
@@ -147,7 +150,10 @@ export class LazyReferenceCollection<
 
   /** Wire the loader function. Called by StoreManager. */
   setLoader(
-    loader: (modelName: string, queries: Array<{ key: string; value: string }>) => Promise<T[]>,
+    loader: (
+      modelName: string,
+      queries: Array<{ key: string; value: string }>,
+    ) => Promise<T[]>,
   ) {
     this.loader = loader;
   }
@@ -161,7 +167,9 @@ export class LazyReferenceCollection<
       return [];
     }
     const all = pool.getAll(this.referencedModelName) as T[];
-    return all.filter((m) => (m as Record<string, unknown>)[this.inverseKey] === this.parentId);
+    return all.filter(
+      (m) => (m as Record<string, unknown>)[this.inverseKey] === this.parentId,
+    );
   }
 
   async load(): Promise<T[]> {
@@ -221,8 +229,9 @@ export class LazyBackReference<T extends BaseModel = BaseModel> {
 
   parentId: string = "";
 
-  private loader: ((modelName: string, key: string, value: string) => Promise<T | null>) | null =
-    null;
+  private loader:
+    | ((modelName: string, key: string, value: string) => Promise<T | null>)
+    | null = null;
 
   constructor(referencedModelName: string, inverseOf: string) {
     this.referencedModelName = referencedModelName;
@@ -239,7 +248,13 @@ export class LazyBackReference<T extends BaseModel = BaseModel> {
     this.parentId = parentId;
   }
 
-  setLoader(loader: (modelName: string, key: string, value: string) => Promise<T | null>) {
+  setLoader(
+    loader: (
+      modelName: string,
+      key: string,
+      value: string,
+    ) => Promise<T | null>,
+  ) {
     this.loader = loader;
   }
 
@@ -250,7 +265,9 @@ export class LazyBackReference<T extends BaseModel = BaseModel> {
     }
     const all = pool.getAll(this.referencedModelName) as T[];
     return (
-      all.find((m) => (m as Record<string, unknown>)[this.inverseOf] === this.parentId) ?? null
+      all.find(
+        (m) => (m as Record<string, unknown>)[this.inverseOf] === this.parentId,
+      ) ?? null
     );
   }
 
@@ -267,7 +284,11 @@ export class LazyBackReference<T extends BaseModel = BaseModel> {
     try {
       const result =
         this.loader != null
-          ? await this.loader(this.referencedModelName, this.inverseOf, this.parentId)
+          ? await this.loader(
+              this.referencedModelName,
+              this.inverseOf,
+              this.parentId,
+            )
           : null;
       runInAction(() => {
         this.value = result;

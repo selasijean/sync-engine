@@ -100,7 +100,11 @@ export class ObjectPool {
    * and add it to the pool. Used everywhere a new model arrives from
    * the server or IDB — eliminates the repeated 4-line pattern.
    */
-  hydrateAndPut(modelName: string, meta: ModelMeta, data: Record<string, unknown>): BaseModel {
+  hydrateAndPut(
+    modelName: string,
+    meta: ModelMeta,
+    data: Record<string, unknown>,
+  ): BaseModel {
     const inst = new meta.ctor();
     inst.hydrate(data);
     inst.makeModelObservable();

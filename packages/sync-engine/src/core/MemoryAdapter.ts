@@ -9,7 +9,11 @@
  * SQLite / Redis / file-system backend.
  */
 
-import { BootstrapType, type DatabaseMeta, type StorageAdapter } from "./Database";
+import {
+  BootstrapType,
+  type DatabaseMeta,
+  type StorageAdapter,
+} from "./Database";
 
 export class MemoryAdapter implements StorageAdapter {
   private meta: DatabaseMeta | null = null;
@@ -48,7 +52,10 @@ export class MemoryAdapter implements StorageAdapter {
     return BootstrapType.Local;
   }
 
-  async writeModels(modelName: string, records: Record<string, unknown>[]): Promise<void> {
+  async writeModels(
+    modelName: string,
+    records: Record<string, unknown>[],
+  ): Promise<void> {
     let bucket = this.models.get(modelName);
     if (bucket == null) {
       bucket = new Map();
@@ -63,7 +70,10 @@ export class MemoryAdapter implements StorageAdapter {
     return [...(this.models.get(modelName)?.values() ?? [])];
   }
 
-  async readModel(modelName: string, id: string): Promise<Record<string, unknown> | null> {
+  async readModel(
+    modelName: string,
+    id: string,
+  ): Promise<Record<string, unknown> | null> {
     return this.models.get(modelName)?.get(id) ?? null;
   }
 
@@ -72,7 +82,9 @@ export class MemoryAdapter implements StorageAdapter {
     indexName: string,
     value: string,
   ): Promise<Record<string, unknown>[]> {
-    return [...(this.models.get(modelName)?.values() ?? [])].filter((r) => r[indexName] === value);
+    return [...(this.models.get(modelName)?.values() ?? [])].filter(
+      (r) => r[indexName] === value,
+    );
   }
 
   async deleteModel(modelName: string, id: string): Promise<void> {

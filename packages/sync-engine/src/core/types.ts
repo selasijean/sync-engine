@@ -118,7 +118,15 @@ export interface IObjectPool {
 export interface IStoreManager {
   readonly objectPool: IObjectPool;
   commitCreate(model: BaseModel): void;
-  commitUpdate(modelId: string, modelName: string, changes: Record<string, PropertyChange>): void;
-  loadCollection(modelName: string, key: string, value: string): Promise<BaseModel[]>;
+  commitUpdate(
+    modelId: string,
+    modelName: string,
+    changes: Record<string, PropertyChange>,
+  ): void;
+  loadCollection(
+    modelName: string,
+    key: string,
+    value: string,
+  ): Promise<BaseModel[]>;
   loadByIds(modelName: string, ids: string[]): Promise<BaseModel[]>;
 }

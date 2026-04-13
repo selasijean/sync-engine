@@ -14,7 +14,10 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "useDefineForClassFields": false,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "paths": {
+      "@sync-engine/*": ["./src/core/*"]
+    }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "__tests__/**/*.ts"]
 }

@@ -34,7 +34,10 @@ export abstract class BaseTransaction {
   }
 
   isSyncedBy(syncId: number): boolean {
-    return this.syncIdNeededForCompletion !== null && syncId >= this.syncIdNeededForCompletion;
+    return (
+      this.syncIdNeededForCompletion !== null &&
+      syncId >= this.syncIdNeededForCompletion
+    );
   }
 
   abstract revert(model: BaseModel): void;
@@ -45,7 +48,11 @@ export class UpdateTransaction extends BaseTransaction {
   readonly action = "U" as const;
   readonly changes: Map<string, PropertyChange>;
 
-  constructor(modelId: string, modelName: string, changes: Record<string, PropertyChange>) {
+  constructor(
+    modelId: string,
+    modelName: string,
+    changes: Record<string, PropertyChange>,
+  ) {
     super(modelId, modelName);
     this.changes = new Map(Object.entries(changes));
   }
@@ -103,7 +110,11 @@ export class UpdateTransaction extends BaseTransaction {
 export class CreateTransaction extends BaseTransaction {
   readonly action = "I" as const;
   readonly data: Record<string, unknown>;
-  constructor(modelId: string, modelName: string, data: Record<string, unknown>) {
+  constructor(
+    modelId: string,
+    modelName: string,
+    data: Record<string, unknown>,
+  ) {
     super(modelId, modelName);
     this.data = data;
   }
@@ -126,7 +137,11 @@ export class CreateTransaction extends BaseTransaction {
 export class DeleteTransaction extends BaseTransaction {
   readonly action = "D" as const;
   readonly snapshot: Record<string, unknown>;
-  constructor(modelId: string, modelName: string, snapshot: Record<string, unknown>) {
+  constructor(
+    modelId: string,
+    modelName: string,
+    snapshot: Record<string, unknown>,
+  ) {
     super(modelId, modelName);
     this.snapshot = snapshot;
   }
@@ -150,7 +165,11 @@ export class DeleteTransaction extends BaseTransaction {
 export class ArchiveTransaction extends BaseTransaction {
   readonly action = "A" as const;
   readonly snapshot: Record<string, unknown>;
-  constructor(modelId: string, modelName: string, snapshot: Record<string, unknown>) {
+  constructor(
+    modelId: string,
+    modelName: string,
+    snapshot: Record<string, unknown>,
+  ) {
     super(modelId, modelName);
     this.snapshot = snapshot;
   }

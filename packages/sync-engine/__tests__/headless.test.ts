@@ -17,7 +17,11 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { StoreManager } from "@sync-engine/StoreManager";
-import { SyncConnection, type SSEClient, type SSEClientFactory } from "@sync-engine/SyncConnection";
+import {
+  SyncConnection,
+  type SSEClient,
+  type SSEClientFactory,
+} from "@sync-engine/SyncConnection";
 import { BaseModel } from "@sync-engine/BaseModel";
 import { Database, type StorageAdapter } from "@sync-engine/Database";
 import { MemoryAdapter } from "@sync-engine/MemoryAdapter";
@@ -274,8 +278,12 @@ describe("Isolated agent sessions", () => {
 
     expect(a.pool.getById("TestTask", "t-shared")).toBeDefined();
     expect(b.pool.getById("TestTask", "t-shared")).toBeDefined();
-    expect((a.pool.getById("TestTask", "t-shared") as TestTask).title).toBe("Shared task");
-    expect((b.pool.getById("TestTask", "t-shared") as TestTask).title).toBe("Shared task");
+    expect((a.pool.getById("TestTask", "t-shared") as TestTask).title).toBe(
+      "Shared task",
+    );
+    expect((b.pool.getById("TestTask", "t-shared") as TestTask).title).toBe(
+      "Shared task",
+    );
 
     a.conn.disconnect();
     b.conn.disconnect();
@@ -317,7 +325,10 @@ describe("MemoryAdapter as storageAdapter", () => {
     ]);
 
     expect(await adapter.readAllModels("TestTask")).toHaveLength(2);
-    expect(await adapter.readModel("TestTask", "a")).toMatchObject({ id: "a", title: "A" });
+    expect(await adapter.readModel("TestTask", "a")).toMatchObject({
+      id: "a",
+      title: "A",
+    });
     expect(await adapter.readModel("TestTask", "z")).toBeNull();
   });
 
@@ -331,7 +342,11 @@ describe("MemoryAdapter as storageAdapter", () => {
       { id: "3", teamId: "t-y", title: "Y1" },
     ]);
 
-    const results = await adapter.readModelsByIndex("TestTask", "teamId", "t-x");
+    const results = await adapter.readModelsByIndex(
+      "TestTask",
+      "teamId",
+      "t-x",
+    );
     expect(results).toHaveLength(2);
     expect(results.every((r) => r["teamId"] === "t-x")).toBe(true);
   });
@@ -367,7 +382,10 @@ describe("MemoryAdapter as storageAdapter", () => {
   });
 
   it("two agents with separate MemoryAdapters converge via delta", async () => {
-    const [a, b] = await Promise.all([makeAgent(new MemoryAdapter()), makeAgent(new MemoryAdapter())]);
+    const [a, b] = await Promise.all([
+      makeAgent(new MemoryAdapter()),
+      makeAgent(new MemoryAdapter()),
+    ]);
 
     const delta: DeltaPacket = {
       syncActions: [
@@ -383,8 +401,12 @@ describe("MemoryAdapter as storageAdapter", () => {
 
     await Promise.all([pushPacket(a.conn, delta), pushPacket(b.conn, delta)]);
 
-    expect((a.pool.getById("TestTask", "t-mem") as TestTask).title).toBe("Memory task");
-    expect((b.pool.getById("TestTask", "t-mem") as TestTask).title).toBe("Memory task");
+    expect((a.pool.getById("TestTask", "t-mem") as TestTask).title).toBe(
+      "Memory task",
+    );
+    expect((b.pool.getById("TestTask", "t-mem") as TestTask).title).toBe(
+      "Memory task",
+    );
 
     a.conn.disconnect();
     b.conn.disconnect();
@@ -442,7 +464,9 @@ describe("Shared StoreManager between agents", () => {
     await sm.undo();
 
     // Both "agents" (any consumer of the shared pool) now see Original
-    expect((sm.objectPool.getById("TestTask", "t1") as TestTask).title).toBe("Original");
+    expect((sm.objectPool.getById("TestTask", "t1") as TestTask).title).toBe(
+      "Original",
+    );
   });
 });
 
@@ -463,7 +487,9 @@ describe("Reactivity in headless mode", () => {
 
   it("objectPool unsubscribe() stops future notifications", () => {
     const notifications: string[] = [];
-    const unsubscribe = sm.objectPool.subscribe("TestTask", () => notifications.push("change"));
+    const unsubscribe = sm.objectPool.subscribe("TestTask", () =>
+      notifications.push("change"),
+    );
 
     const task1 = new TestTask();
     task1.hydrate({ id: "t1", title: "First" });
@@ -501,7 +527,9 @@ describe("Reactivity in headless mode", () => {
     project.makeModelObservable();
 
     const notifications: string[] = [];
-    const unsubscribe = project.tasks.subscribe(() => notifications.push("fired"));
+    const unsubscribe = project.tasks.subscribe(() =>
+      notifications.push("fired"),
+    );
 
     await project.tasks.load();
     expect(notifications).toHaveLength(1);
@@ -523,7 +551,10 @@ describe("model.watch() in headless context", () => {
     task.makeModelObservable();
 
     const observed: string[] = [];
-    const unwatch = task.watch((m) => m.title, (newVal) => observed.push(newVal));
+    const unwatch = task.watch(
+      (m) => m.title,
+      (newVal) => observed.push(newVal),
+    );
 
     task.title = "Updated";
 
@@ -554,7 +585,10 @@ describe("model.watch() in headless context", () => {
     task.makeModelObservable();
 
     const observed: string[] = [];
-    const unwatch = task.watch((m) => m.title, (newVal) => observed.push(newVal));
+    const unwatch = task.watch(
+      (m) => m.title,
+      (newVal) => observed.push(newVal),
+    );
 
     task.title = "Same";
 
@@ -568,7 +602,10 @@ describe("model.watch() in headless context", () => {
     task.makeModelObservable();
 
     const observed: string[] = [];
-    const unwatch = task.watch((m) => m.title, (newVal) => observed.push(newVal));
+    const unwatch = task.watch(
+      (m) => m.title,
+      (newVal) => observed.push(newVal),
+    );
 
     task.title = "First";
     unwatch();
@@ -581,7 +618,9 @@ describe("model.watch() in headless context", () => {
     const { pool, conn, storage } = await makeAgent(new MemoryAdapter());
 
     const poolNotifications: string[] = [];
-    const unsubscribePool = pool.subscribe("TestTask", () => poolNotifications.push("pool"));
+    const unsubscribePool = pool.subscribe("TestTask", () =>
+      poolNotifications.push("pool"),
+    );
 
     await pushPacket(conn, {
       syncActions: [
@@ -601,7 +640,10 @@ describe("model.watch() in headless context", () => {
     expect(task).toBeDefined();
 
     const titleChanges: string[] = [];
-    const unwatch = task.watch((m) => m.title, (newVal) => titleChanges.push(newVal));
+    const unwatch = task.watch(
+      (m) => m.title,
+      (newVal) => titleChanges.push(newVal),
+    );
 
     await pushPacket(conn, {
       syncActions: [

@@ -55,9 +55,15 @@ export interface StorageAdapter {
   saveMeta(meta: DatabaseMeta): Promise<void>;
   get currentMeta(): DatabaseMeta | null;
   determineBootstrapType(): Promise<BootstrapType>;
-  writeModels(modelName: string, records: Record<string, unknown>[]): Promise<void>;
+  writeModels(
+    modelName: string,
+    records: Record<string, unknown>[],
+  ): Promise<void>;
   readAllModels(modelName: string): Promise<Record<string, unknown>[]>;
-  readModel(modelName: string, id: string): Promise<Record<string, unknown> | null>;
+  readModel(
+    modelName: string,
+    id: string,
+  ): Promise<Record<string, unknown> | null>;
   readModelsByIndex(
     modelName: string,
     indexName: string,
@@ -170,11 +176,16 @@ export class Database implements StorageAdapter {
   }
 
   /** Open DB at a specific version, triggering migration in onupgradeneeded. */
-  private openDBWithMigration(dbName: string, version: number): Promise<IDBDatabase> {
+  private openDBWithMigration(
+    dbName: string,
+    version: number,
+  ): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(dbName, version);
       request.onblocked = () => {
-        console.warn(`[DB] upgrade to v${version} blocked — another tab has "${dbName}" open`);
+        console.warn(
+          `[DB] upgrade to v${version} blocked — another tab has "${dbName}" open`,
+        );
       };
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
@@ -224,7 +235,9 @@ export class Database implements StorageAdapter {
       db.createObjectStore("__transactions", { autoIncrement: true });
     }
 
-    const registeredModels = new Set(ModelRegistry.allModels().map((m) => m.name));
+    const registeredModels = new Set(
+      ModelRegistry.allModels().map((m) => m.name),
+    );
     const existingStores = new Set<string>();
     for (let i = 0; i < db.objectStoreNames.length; i++) {
       const name = db.objectStoreNames[i];
@@ -373,7 +386,10 @@ export class Database implements StorageAdapter {
   // Model data operations
   // =========================================================================
 
-  async writeModels(modelName: string, records: Record<string, unknown>[]): Promise<void> {
+  async writeModels(
+    modelName: string,
+    records: Record<string, unknown>[],
+  ): Promise<void> {
     if (!this.hasStore(modelName)) {
       return;
     }
@@ -392,7 +408,10 @@ export class Database implements StorageAdapter {
     return this.idbGetAll(modelName);
   }
 
-  async readModel(modelName: string, id: string): Promise<Record<string, unknown> | null> {
+  async readModel(
+    modelName: string,
+    id: string,
+  ): Promise<Record<string, unknown> | null> {
     if (!this.hasStore(modelName)) {
       return null;
     }
@@ -419,7 +438,9 @@ export class Database implements StorageAdapter {
         const r = store.getAll();
         r.onsuccess = () =>
           resolve(
-            (r.result ?? []).filter((rec: Record<string, unknown>) => rec[indexName] === value),
+            (r.result ?? []).filter(
+              (rec: Record<string, unknown>) => rec[indexName] === value,
+            ),
           );
         r.onerror = () => reject(r.error);
       }
@@ -533,7 +554,9 @@ export class Database implements StorageAdapter {
 
   private idbGet<T>(storeName: string, key: string): Promise<T | null> {
     return new Promise((resolve, reject) => {
-      const r = this.db!.transaction(storeName, "readonly").objectStore(storeName).get(key);
+      const r = this.db!.transaction(storeName, "readonly")
+        .objectStore(storeName)
+        .get(key);
       r.onsuccess = () => resolve(r.result ?? null);
       r.onerror = () => reject(r.error);
     });
@@ -541,13 +564,19 @@ export class Database implements StorageAdapter {
 
   private idbGetAll<T>(storeName: string): Promise<T[]> {
     return new Promise((resolve, reject) => {
-      const r = this.db!.transaction(storeName, "readonly").objectStore(storeName).getAll();
+      const r = this.db!.transaction(storeName, "readonly")
+        .objectStore(storeName)
+        .getAll();
       r.onsuccess = () => resolve(r.result ?? []);
       r.onerror = () => reject(r.error);
     });
   }
 
-  private idbPut(storeName: string, value: unknown, key?: string): Promise<void> {
+  private idbPut(
+    storeName: string,
+    value: unknown,
+    key?: string,
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       const tx = this.db!.transaction(storeName, "readwrite");
       tx.objectStore(storeName).put(value, key);

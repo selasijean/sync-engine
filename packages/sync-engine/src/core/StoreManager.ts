@@ -24,9 +24,18 @@ import { ObjectPool } from "./ObjectPool";
 import { Database, BootstrapType, type StorageAdapter } from "./Database";
 import { FullStore, PartialStore, type ModelStore } from "./Store";
 import { TransactionQueue, type TransactionSender } from "./TransactionQueue";
-import { SyncConnection, type DeltaPacket, type SSEClientFactory } from "./SyncConnection";
+import {
+  SyncConnection,
+  type DeltaPacket,
+  type SSEClientFactory,
+} from "./SyncConnection";
 import { BaseModel } from "./BaseModel";
-import { BootstrapPhase, LoadStrategy, PropertyType, type PropertyChange } from "./types";
+import {
+  BootstrapPhase,
+  LoadStrategy,
+  PropertyType,
+  type PropertyChange,
+} from "./types";
 
 function prop(model: BaseModel, key: string): unknown {
   return (model as unknown as Record<string, unknown>)[key];
@@ -177,7 +186,11 @@ export class StoreManager {
     this.config = config;
     this.objectPool = new ObjectPool();
     this.database = config.storageAdapter ?? new Database(config.workspaceId);
-    this.transactionQueue = new TransactionQueue(this.database, this.objectPool, config.undoLimit);
+    this.transactionQueue = new TransactionQueue(
+      this.database,
+      this.objectPool,
+      config.undoLimit,
+    );
     if (config.transactionSender != null) {
       this.transactionQueue.setSender(config.transactionSender);
     }
@@ -207,7 +220,7 @@ export class StoreManager {
     if (ModelRegistry.allModels().length === 0) {
       throw new Error(
         "No models registered. Import your model files before calling bootstrap().\n" +
-        "Example: import \"@/lib/models\"; // register models"
+          'Example: import "@/lib/models"; // register models',
       );
     }
     try {
@@ -284,14 +297,23 @@ export class StoreManager {
     if (deferred.size > 0) {
       // Phase 1: critical models only
       const criticalModels = allModelNames.filter((n) => !deferred.has(n));
-      this.setPhase(BootstrapPhase.Fetching, `phase 1: ${criticalModels.length} critical models`);
-      const res = await this.config.bootstrapFetcher(BootstrapType.Full, undefined, criticalModels);
+      this.setPhase(
+        BootstrapPhase.Fetching,
+        `phase 1: ${criticalModels.length} critical models`,
+      );
+      const res = await this.config.bootstrapFetcher(
+        BootstrapType.Full,
+        undefined,
+        criticalModels,
+      );
 
       this.setPhase(BootstrapPhase.WritingToDatabase);
       await Promise.all(
         Object.entries(res.models).map(([name, records]) => {
           const store = this.stores.get(name);
-          return store != null ? store.loadFromServer(records) : Promise.resolve();
+          return store != null
+            ? store.loadFromServer(records)
+            : Promise.resolve();
         }),
       );
 
@@ -320,7 +342,9 @@ export class StoreManager {
       await Promise.all(
         Object.entries(res.models).map(([name, records]) => {
           const store = this.stores.get(name);
-          return store != null ? store.loadFromServer(records) : Promise.resolve();
+          return store != null
+            ? store.loadFromServer(records)
+            : Promise.resolve();
         }),
       );
 
@@ -344,11 +368,17 @@ export class StoreManager {
    */
   private async fetchDeferredModels(modelNames: string[], sinceSyncId: number) {
     try {
-      const res = await this.config.bootstrapFetcher(BootstrapType.Partial, sinceSyncId, modelNames);
+      const res = await this.config.bootstrapFetcher(
+        BootstrapType.Partial,
+        sinceSyncId,
+        modelNames,
+      );
       await Promise.all(
         Object.entries(res.models).map(([name, records]) => {
           const store = this.stores.get(name);
-          return store != null ? store.loadFromServer(records) : Promise.resolve();
+          return store != null
+            ? store.loadFromServer(records)
+            : Promise.resolve();
         }),
       );
       // Update lastSyncId if the server advanced during our fetch
@@ -369,13 +399,23 @@ export class StoreManager {
     this.setPhase(BootstrapPhase.Hydrating, "from IndexedDB");
     await Promise.all(
       [...this.stores.entries()]
-        .filter(([name]) => ModelRegistry.getModelMeta(name)?.loadStrategy === LoadStrategy.Instant)
+        .filter(
+          ([name]) =>
+            ModelRegistry.getModelMeta(name)?.loadStrategy ===
+            LoadStrategy.Instant,
+        )
         .map(([, store]) => store.loadFromDatabase()),
     );
 
     // Fetch delta from server
-    this.setPhase(BootstrapPhase.Fetching, `since syncId ${existing.lastSyncId}`);
-    const res = await this.config.bootstrapFetcher(BootstrapType.Partial, existing.lastSyncId);
+    this.setPhase(
+      BootstrapPhase.Fetching,
+      `since syncId ${existing.lastSyncId}`,
+    );
+    const res = await this.config.bootstrapFetcher(
+      BootstrapType.Partial,
+      existing.lastSyncId,
+    );
 
     // Check backendDatabaseVersion. If the server's schema changed since our
     // last bootstrap, the delta data might be structured differently (renamed
@@ -417,7 +457,8 @@ export class StoreManager {
       subscribedSyncGroups: res.subscribedSyncGroups,
       schemaHash: ModelRegistry.schemaHash,
       dbVersion: existing.dbVersion ?? 1,
-      backendDatabaseVersion: res.backendDatabaseVersion ?? existing.backendDatabaseVersion ?? 0,
+      backendDatabaseVersion:
+        res.backendDatabaseVersion ?? existing.backendDatabaseVersion ?? 0,
     });
   }
 
@@ -425,7 +466,11 @@ export class StoreManager {
     this.setPhase(BootstrapPhase.Hydrating, "from IndexedDB");
     await Promise.all(
       [...this.stores.entries()]
-        .filter(([name]) => ModelRegistry.getModelMeta(name)?.loadStrategy === LoadStrategy.Instant)
+        .filter(
+          ([name]) =>
+            ModelRegistry.getModelMeta(name)?.loadStrategy ===
+            LoadStrategy.Instant,
+        )
         .map(([, store]) => store.loadFromDatabase()),
     );
   }
@@ -443,7 +488,11 @@ export class StoreManager {
     this.transactionQueue.enqueueCreate(model.id, meta.name, data);
   }
 
-  commitUpdate(modelId: string, modelName: string, changes: Record<string, PropertyChange>) {
+  commitUpdate(
+    modelId: string,
+    modelName: string,
+    changes: Record<string, PropertyChange>,
+  ) {
     this.transactionQueue.enqueueUpdate(modelId, modelName, changes);
   }
 
@@ -554,7 +603,10 @@ export class StoreManager {
    * one being deleted. Mirrors SyncConnection.cascadeDelete but creates
    * actual transactions (so undo works).
    */
-  private cascadeDeleteClient(deletedModelName: string, deletedModelId: string) {
+  private cascadeDeleteClient(
+    deletedModelName: string,
+    deletedModelId: string,
+  ) {
     for (const meta of ModelRegistry.allModels()) {
       for (const [propName, propMeta] of meta.properties) {
         // BackReference: "owned by" the deleted model → delete them
@@ -602,7 +654,10 @@ export class StoreManager {
   }
 
   /** Same cascade logic for archive. */
-  private cascadeArchiveClient(archivedModelName: string, archivedModelId: string) {
+  private cascadeArchiveClient(
+    archivedModelName: string,
+    archivedModelId: string,
+  ) {
     // Archive cascade is similar but uses onArchive metadata
     for (const meta of ModelRegistry.allModels()) {
       for (const [_propName, propMeta] of meta.properties) {
@@ -646,7 +701,10 @@ export class StoreManager {
       const meta = ModelRegistry.getModelMeta(modelName);
       if (meta?.loadStrategy === LoadStrategy.Instant) {
         for (const record of records) {
-          const existing = this.objectPool.getById(modelName, record.id as string);
+          const existing = this.objectPool.getById(
+            modelName,
+            record.id as string,
+          );
           if (existing != null) {
             // Update existing model with new data
             for (const [k, v] of Object.entries(record)) {
@@ -681,7 +739,9 @@ export class StoreManager {
       throw err;
     }
     if (result instanceof Promise) {
-      return result.finally(() => this.transactionQueue.endBatch(id)).then(() => id);
+      return result
+        .finally(() => this.transactionQueue.endBatch(id))
+        .then(() => id);
     }
     this.transactionQueue.endBatch(id);
     return id;
@@ -705,7 +765,11 @@ export class StoreManager {
 
   // ── Lazy loading ──────────────────────────────────────────────────────────
 
-  private static collectionKey(modelName: string, indexKey: string, value: string): string {
+  private static collectionKey(
+    modelName: string,
+    indexKey: string,
+    value: string,
+  ): string {
     return `${modelName}:${indexKey}:${value}`;
   }
 
@@ -715,7 +779,9 @@ export class StoreManager {
     indexKey: string,
     value: string,
   ): Promise<T[]> {
-    const inMemory = this.objectPool.getAll(modelName).filter((m) => prop(m, indexKey) === value);
+    const inMemory = this.objectPool
+      .getAll(modelName)
+      .filter((m) => prop(m, indexKey) === value);
     const inMemoryIds = new Set(inMemory.map((m) => m.id));
 
     const key = StoreManager.collectionKey(modelName, indexKey, value);
@@ -740,7 +806,11 @@ export class StoreManager {
       //
       // Contrast with loadOne: a single ID lookup is binary — either the record
       // is in IDB or it isn't — so the server is only consulted as a last resort.
-      const serverRecords = await this.config.onDemandFetcher(modelName, indexKey, value);
+      const serverRecords = await this.config.onDemandFetcher(
+        modelName,
+        indexKey,
+        value,
+      );
       if (serverRecords.length > 0) {
         await this.database.writeModels(modelName, serverRecords);
       }
@@ -749,13 +819,19 @@ export class StoreManager {
       this.loadedCollections.add(key);
     }
 
-    const idbRecords = await this.database.readModelsByIndex(modelName, indexKey, value);
+    const idbRecords = await this.database.readModelsByIndex(
+      modelName,
+      indexKey,
+      value,
+    );
     const results = [...inMemory] as T[];
 
     if (meta != null) {
       for (const record of idbRecords) {
         if (!inMemoryIds.has(record.id as string)) {
-          results.push(this.objectPool.hydrateAndPut(modelName, meta, record) as T);
+          results.push(
+            this.objectPool.hydrateAndPut(modelName, meta, record) as T,
+          );
         }
       }
     }
@@ -764,18 +840,29 @@ export class StoreManager {
     return results;
   }
 
-  private isCollectionLoaded(modelName: string, indexKey: string, value: string): boolean {
-    return this.loadedCollections.has(StoreManager.collectionKey(modelName, indexKey, value));
+  private isCollectionLoaded(
+    modelName: string,
+    indexKey: string,
+    value: string,
+  ): boolean {
+    return this.loadedCollections.has(
+      StoreManager.collectionKey(modelName, indexKey, value),
+    );
   }
 
   /** Load multiple models by ID (for OwnedCollection resolution). */
   async loadByIds(modelName: string, ids: string[]): Promise<BaseModel[]> {
-    const results = await Promise.all(ids.map((id) => this.loadOne(modelName, id)));
+    const results = await Promise.all(
+      ids.map((id) => this.loadOne(modelName, id)),
+    );
     return results.filter((m): m is BaseModel => m != null);
   }
 
   /** Load a single model by ID (for partial/lazy models not yet in memory). */
-  async loadOne<T extends BaseModel = BaseModel>(modelName: string, id: string): Promise<T | null> {
+  async loadOne<T extends BaseModel = BaseModel>(
+    modelName: string,
+    id: string,
+  ): Promise<T | null> {
     const existing = this.objectPool.getById(modelName, id);
     if (existing != null) {
       return existing as T;
@@ -785,8 +872,16 @@ export class StoreManager {
     let record = await this.database.readModel(modelName, id);
 
     const idKey = `${modelName}:${id}`;
-    if (record == null && this.config.onDemandFetcher != null && !this.loadedIds.has(idKey)) {
-      const serverRecords = await this.config.onDemandFetcher(modelName, 'id', id);
+    if (
+      record == null &&
+      this.config.onDemandFetcher != null &&
+      !this.loadedIds.has(idKey)
+    ) {
+      const serverRecords = await this.config.onDemandFetcher(
+        modelName,
+        "id",
+        id,
+      );
       if (serverRecords.length > 0) {
         await this.database.writeModels(modelName, serverRecords);
         record = await this.database.readModel(modelName, id);

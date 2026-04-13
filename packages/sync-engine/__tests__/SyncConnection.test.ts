@@ -336,7 +336,9 @@ describe("SyncConnection", () => {
 
   describe("resolveBySync", () => {
     it("resolves awaiting transactions when the delta syncId matches", async () => {
-      const sender = vi.fn().mockResolvedValue({ success: true, lastSyncId: 7 });
+      const sender = vi
+        .fn()
+        .mockResolvedValue({ success: true, lastSyncId: 7 });
       queue.setSender(sender);
 
       await queue.enqueueUpdate("t1", "TestTask", {
@@ -384,7 +386,8 @@ describe("SyncConnection", () => {
         queue,
         undefined,
         undefined,
-        (modelName, indexKey, value) => loadedCollections.has(`${modelName}:${indexKey}:${value}`),
+        (modelName, indexKey, value) =>
+          loadedCollections.has(`${modelName}:${indexKey}:${value}`),
       );
     });
 
@@ -507,9 +510,27 @@ describe("SyncConnection", () => {
     it("processes all actions and uses the max syncId", async () => {
       await process(conn, {
         syncActions: [
-          { id: 10, action: "I", modelName: "TestTask", modelId: "t10", data: { title: "A" } },
-          { id: 11, action: "I", modelName: "TestTask", modelId: "t11", data: { title: "B" } },
-          { id: 12, action: "I", modelName: "TestProject", modelId: "p1", data: { title: "P" } },
+          {
+            id: 10,
+            action: "I",
+            modelName: "TestTask",
+            modelId: "t10",
+            data: { title: "A" },
+          },
+          {
+            id: 11,
+            action: "I",
+            modelName: "TestTask",
+            modelId: "t11",
+            data: { title: "B" },
+          },
+          {
+            id: 12,
+            action: "I",
+            modelName: "TestProject",
+            modelId: "p1",
+            data: { title: "P" },
+          },
         ],
       });
 

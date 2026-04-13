@@ -42,7 +42,8 @@ describe("ModelRegistry", () => {
 
   describe("property registration", () => {
     it("@Property registers with type Property", () => {
-      const prop = ModelRegistry.getModelMeta("TestTask")!.properties.get("title");
+      const prop =
+        ModelRegistry.getModelMeta("TestTask")!.properties.get("title");
       expect(prop).toBeDefined();
       expect(prop!.type).toBe(PropertyType.Property);
     });
@@ -64,13 +65,15 @@ describe("ModelRegistry", () => {
     });
 
     it("@Reference nullable flag is recorded", () => {
-      const assigneeProp = ModelRegistry.getModelMeta("TestTask")!.properties.get("assigneeId");
+      const assigneeProp =
+        ModelRegistry.getModelMeta("TestTask")!.properties.get("assigneeId");
       expect(assigneeProp!.nullable).toBe(true);
       expect(assigneeProp!.onDelete).toBe("nullify");
     });
 
     it("@ReferenceCollection registers with the correct inverseOf key", () => {
-      const prop = ModelRegistry.getModelMeta("TestProject")!.properties.get("tasks");
+      const prop =
+        ModelRegistry.getModelMeta("TestProject")!.properties.get("tasks");
       expect(prop).toBeDefined();
       expect(prop!.type).toBe(PropertyType.ReferenceCollection);
       expect(prop!.referenceTo).toBe("TestTask");
@@ -78,7 +81,8 @@ describe("ModelRegistry", () => {
     });
 
     it("@BackReference registers with referenceTo and inverseOf", () => {
-      const prop = ModelRegistry.getModelMeta("TestNote")!.properties.get("taskRef");
+      const prop =
+        ModelRegistry.getModelMeta("TestNote")!.properties.get("taskRef");
       expect(prop).toBeDefined();
       expect(prop!.type).toBe(PropertyType.BackReference);
       expect(prop!.referenceTo).toBe("TestTask");
