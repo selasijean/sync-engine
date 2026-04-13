@@ -15,10 +15,35 @@
  */
 
 import { ModelRegistry } from "./ModelRegistry";
-import { PropertyType, type PropertyChange, type IObjectPool, type IStoreManager } from "./types";
-import { LazyCollectionBase, LazyReferenceCollection, LazyBackReference } from "./LazyCollection";
+import {
+  PropertyType,
+  type PropertyChange,
+  type IObjectPool,
+  type IStoreManager,
+} from "./types";
+import {
+  LazyCollectionBase,
+  LazyReferenceCollection,
+  LazyBackReference,
+} from "./LazyCollection";
 import { LazyOwnedCollection } from "./LazyOwnedCollection";
-import { action, computed, observable, reaction, type IObservableValue } from "mobx";
+import {
+  action,
+  computed,
+  observable,
+  reaction,
+  runInAction,
+  type IObservableValue,
+} from "mobx";
+
+// The four PropertyTypes that have MobX boxes and direct setters — the "flat scalar" fields.
+// Used by makeModelObservable (to create boxes) and update() (to filter writable keys).
+const FLAT_PROPERTY_TYPES = new Set([
+  PropertyType.Property,
+  PropertyType.EphemeralProperty,
+  PropertyType.Reference,
+  PropertyType.ReferenceArray,
+]);
 
 export class BaseModel {
   id: string = crypto.randomUUID();
@@ -33,10 +58,15 @@ export class BaseModel {
   // system and is never reset, keeping the live StoreManager reachable for
   // new model instances created after a reload.
   static get storeManager(): IStoreManager | null {
-    return (globalThis as { __syncEngineStore?: IStoreManager | null }).__syncEngineStore ?? null;
+    return (
+      (globalThis as { __syncEngineStore?: IStoreManager | null })
+        .__syncEngineStore ?? null
+    );
   }
   static set storeManager(sm: IStoreManager | null) {
-    (globalThis as { __syncEngineStore?: IStoreManager | null }).__syncEngineStore = sm ?? null;
+    (
+      globalThis as { __syncEngineStore?: IStoreManager | null }
+    ).__syncEngineStore = sm ?? null;
   }
 
   /** Runtime lazy collections, keyed by property name. */
@@ -72,7 +102,8 @@ export class BaseModel {
     if (!this.pendingChanges.has(propName)) {
       const meta = ModelRegistry.getMetaForInstance(this);
       const propMeta = meta?.properties.get(propName);
-      const serialized = propMeta?.serializer != null ? propMeta.serializer(oldValue) : oldValue;
+      const serialized =
+        propMeta?.serializer != null ? propMeta.serializer(oldValue) : oldValue;
       this.pendingChanges.set(propName, serialized);
 
       // Invalidate any OwnedCollections backed by this property so they
@@ -121,7 +152,7 @@ export class BaseModel {
               // hydrate() hasn't run yet (new model) — preserve the class field value.
               currentValue = ownDesc.value;
             }
-             
+
             delete (this as Record<string, unknown>)[name];
           }
 
@@ -142,7 +173,10 @@ export class BaseModel {
         // The collection's hydrate() stores the parent ID and computes
         // the partial index values for future IDB queries.
         case PropertyType.ReferenceCollection: {
-          const collection = new LazyReferenceCollection(prop.referenceTo!, prop.inverseOf!);
+          const collection = new LazyReferenceCollection(
+            prop.referenceTo!,
+            prop.inverseOf!,
+          );
           collection.hydrate(this.id);
 
           // Wire loader from StoreManager (for async IDB/server loading)
@@ -190,12 +224,19 @@ export class BaseModel {
         // ── BackReference → create LazyBackReference ──
         // e.g. Issue.favorite → LazyBackReference("Favorite", "issueId")
         case PropertyType.BackReference: {
-          const backRef = new LazyBackReference(prop.referenceTo!, prop.inverseOf!);
+          const backRef = new LazyBackReference(
+            prop.referenceTo!,
+            prop.inverseOf!,
+          );
           backRef.hydrate(this.id);
 
           if (BaseModel.storeManager != null) {
             backRef.setLoader(async (modelName, key, value) => {
-              const items = await BaseModel.storeManager!.loadCollection(modelName, key, value);
+              const items = await BaseModel.storeManager!.loadCollection(
+                modelName,
+                key,
+                value,
+              );
               return items[0] ?? null;
             });
           }
@@ -220,7 +261,10 @@ export class BaseModel {
     // ── Wire @Computed getters with MobX computed() ──
     // Memoizes the getter — re-evaluates only when its observed dependencies change.
     for (const compName of meta.computedProps) {
-      const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(this), compName);
+      const descriptor = Object.getOwnPropertyDescriptor(
+        Object.getPrototypeOf(this),
+        compName,
+      );
       if (descriptor?.get != null) {
         const fn: () => unknown = descriptor.get.bind(this);
         const memo = computed(fn);
@@ -245,7 +289,10 @@ export class BaseModel {
     }
 
     // Stamp updatedAt when there are actual changes, if the model declares it as a @Property.
-    if (this.pendingChanges.size > 0 && meta?.properties.has("updatedAt") === true) {
+    if (
+      this.pendingChanges.size > 0 &&
+      meta?.properties.has("updatedAt") === true
+    ) {
       (this as Record<string, unknown>)["updatedAt"] = new Date();
     }
 
@@ -254,13 +301,19 @@ export class BaseModel {
       const propMeta = meta?.properties.get(propName);
       const currentValue = (this as Record<string, unknown>)[propName];
       const newSerialized =
-        propMeta?.serializer != null ? propMeta.serializer(currentValue) : currentValue;
+        propMeta?.serializer != null
+          ? propMeta.serializer(currentValue)
+          : currentValue;
       changes[propName] = { oldValue: oldSerialized, newValue: newSerialized };
     }
     this.pendingChanges.clear();
 
     if (BaseModel.storeManager != null && Object.keys(changes).length > 0) {
-      BaseModel.storeManager.commitUpdate(this.id, meta?.name ?? "Unknown", changes);
+      BaseModel.storeManager.commitUpdate(
+        this.id,
+        meta?.name ?? "Unknown",
+        changes,
+      );
     }
 
     return changes;
@@ -278,14 +331,56 @@ export class BaseModel {
    * @param callback - fires whenever the selector result changes; receives new and previous value
    * @returns unwatch function — call it to stop observing
    */
-  watch<T>(selector: (model: this) => T, callback: (newValue: T, oldValue: T) => void): () => void {
+  watch<T>(
+    selector: (model: this) => T,
+    callback: (newValue: T, oldValue: T) => void,
+  ): () => void {
     return reaction(() => selector(this), callback);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Update — bulk field assignment + save
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Bulk-assign fields from a plain object, then save.
+   *
+   * Works for both new and existing pool models:
+   *   - New model (not yet saved): populates fields before the engine begins
+   *     tracking changes, then commits the create to the server.
+   *   - Existing pool model: assigns each field through the normal setter so
+   *     changes are tracked, then commits the update to the server.
+   *
+   * Only `@Property`, `@EphemeralProperty`, `@Reference` (ID fields), and
+   * `@ReferenceArray` fields are written — relationship objects and internals
+   * are ignored.
+   */
+  update(data: Record<string, unknown>) {
+    if (this.store === null) {
+      this.hydrate(data);
+    } else {
+      const meta = ModelRegistry.getMetaForInstance(this);
+      runInAction(() => {
+        for (const [key, value] of Object.entries(data)) {
+          if (key === "id") {
+            continue;
+          }
+          const propMeta = meta?.properties.get(key);
+          if (propMeta == null || !FLAT_PROPERTY_TYPES.has(propMeta.type)) {
+            continue;
+          }
+          (this as Record<string, unknown>)[key] = value;
+        }
+      });
+    }
+    this.save();
   }
 
   // ---------------------------------------------------------------------------
   // Hydration — flat values + recursive for embedded objects
   // ---------------------------------------------------------------------------
 
+  /** @internal */
   hydrate(data: Record<string, unknown>) {
     const meta = ModelRegistry.getMetaForInstance(this);
 
@@ -311,7 +406,8 @@ export class BaseModel {
         continue;
       }
 
-      const deserialized = propMeta?.deserializer != null ? propMeta.deserializer(value) : value;
+      const deserialized =
+        propMeta?.deserializer != null ? propMeta.deserializer(value) : value;
       (this as Record<string, unknown>)[`__raw_${key}`] = deserialized;
       // If the model is already observable, update the MobX box directly so
       // hydrate() is safe to call on live pool models (e.g. from SyncConnection).

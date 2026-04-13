@@ -26,6 +26,40 @@ make clean        # stop containers + wipe Postgres volume
 
 Wrap your app in `<SyncProvider>` once, then use the hooks anywhere inside it.
 
+### Defining models
+
+Models extend `BaseModel` and use decorators to declare their fields and relationships.
+
+```ts
+import { BaseModel, ClientModel, Property, Reference, ReferenceCollection, LoadStrategy } from "sync-engine";
+import type { LazyReferenceCollection } from "sync-engine";
+
+@ClientModel({ loadStrategy: LoadStrategy.Instant })
+export class Team extends BaseModel {
+  @Property() public name = "";
+
+  @ReferenceCollection("Issue", { lazy: true })
+  public issues: LazyReferenceCollection<Issue>;
+}
+
+@ClientModel({ loadStrategy: LoadStrategy.Instant })
+export class Issue extends BaseModel {
+  @Property() public title = "";
+  @Property() public priority = 0;
+
+  @Property({ indexed: true })
+  public teamId: string | null = null;
+
+  @Reference("Team", { onDelete: "cascade" })
+  public team: Team;
+}
+```
+
+- `@Property` — a persisted field, synced with the server
+- `@Reference` — a foreign key + resolved model instance (e.g. `issue.team`)
+- `@ReferenceCollection` — a one-to-many relationship, loaded lazily on demand
+- `loadStrategy: LoadStrategy.Instant` — loaded at bootstrap; use `Lazy` or `Partial` for large or infrequently-needed models
+
 ### Setup
 
 Import your models before `bootstrap()` is called — model classes register themselves via decorators on import.
@@ -75,6 +109,19 @@ const { phase } = useBootstrapStatus();            // loading state
 // Optimistic update
 issue.title = "New title";
 issue.save();
+
+// Bulk-assign fields from an object using update() — works for both new and existing models
+const issue = new Issue();
+issue.update({ title: "Hello", priority: 1, teamId: "abc" }); // creates + sends to server
+
+issue.update({ title: "New title", priority: 2 }); // updates + sends to server
+
+// For related models, save each separately and pass the ID — not the object
+const team = new Team();
+team.update({ name: "Engineering" });
+
+const issue = new Issue();
+issue.update({ title: "Hello", teamId: team.id });
 
 // Batch — grouped into one undoable action
 const batch = useBatch();
