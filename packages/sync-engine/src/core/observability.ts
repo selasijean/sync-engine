@@ -54,7 +54,10 @@ export function defineObservableProperty(target: object, propName: string) {
       this[rawKey] = newValue;
 
       // Notify the change-tracking system (only after makeModelObservable())
-      if (this.__observabilityEnabled && typeof this.propertyChanged === "function") {
+      if (
+        this.__observabilityEnabled &&
+        typeof this.propertyChanged === "function"
+      ) {
         this.propertyChanged(propName, oldValue, newValue);
       }
     },

@@ -93,7 +93,11 @@ export class SyncConnection {
     private queue: TransactionQueue,
     private onPacket?: (p: DeltaPacket) => void,
     private onSyncGroupsChanged?: SyncGroupChangeHandler,
-    private isCollectionLoaded?: (modelName: string, indexKey: string, value: string) => boolean,
+    private isCollectionLoaded?: (
+      modelName: string,
+      indexKey: string,
+      value: string,
+    ) => boolean,
     private sseClientFactory: SSEClientFactory = browserSSEFactory,
   ) {}
 
@@ -197,7 +201,10 @@ export class SyncConnection {
 
     // Step 1: sync group changes → trigger scoped loading
     let groupsChanged = false;
-    if ((packet.addedSyncGroups?.length ?? 0) > 0 || (packet.removedSyncGroups?.length ?? 0) > 0) {
+    if (
+      (packet.addedSyncGroups?.length ?? 0) > 0 ||
+      (packet.removedSyncGroups?.length ?? 0) > 0
+    ) {
       groupsChanged = true;
       const groups = new Set(meta.subscribedSyncGroups);
       for (const g of packet.addedSyncGroups ?? []) {
@@ -221,7 +228,9 @@ export class SyncConnection {
     // Step 4: apply to IndexedDB (server is SSOT — IDB mirrors it)
     for (const action of packet.syncActions) {
       if (["I", "U", "V", "C"].includes(action.action) && action.data != null) {
-        await this.database.writeModels(action.modelName, [{ id: action.modelId, ...action.data }]);
+        await this.database.writeModels(action.modelName, [
+          { id: action.modelId, ...action.data },
+        ]);
       } else if (action.action === "D" || action.action === "A") {
         await this.database.deleteModel(action.modelName, action.modelId);
       }
@@ -299,7 +308,11 @@ export class SyncConnection {
 
           // If any reference IDs changed (e.g. issue moved teams),
           // invalidate both old and new parent collections
-          this.invalidateOnReferenceChange(action.modelName, oldRefs, action.data);
+          this.invalidateOnReferenceChange(
+            action.modelName,
+            oldRefs,
+            action.data,
+          );
         }
         break;
       }
@@ -326,7 +339,10 @@ export class SyncConnection {
   // loadCollection is called for that parent.
   // =========================================================================
 
-  private shouldHydrateInsert(modelMeta: ModelMeta, data: Record<string, unknown>): boolean {
+  private shouldHydrateInsert(
+    modelMeta: ModelMeta,
+    data: Record<string, unknown>,
+  ): boolean {
     // No checker registered → behave as before (hydrate everything)
     if (this.isCollectionLoaded == null) {
       return true;
@@ -339,11 +355,17 @@ export class SyncConnection {
 
     // For on-demand models, hydrate only if the parent collection has been loaded
     for (const [propName, propMeta] of modelMeta.properties) {
-      if (propMeta.type !== PropertyType.Reference || propMeta.referenceTo == null) {
+      if (
+        propMeta.type !== PropertyType.Reference ||
+        propMeta.referenceTo == null
+      ) {
         continue;
       }
       const parentId = data[propName] as string | undefined;
-      if (parentId != null && this.isCollectionLoaded(modelMeta.name, propName, parentId)) {
+      if (
+        parentId != null &&
+        this.isCollectionLoaded(modelMeta.name, propName, parentId)
+      ) {
         return true;
       }
     }
@@ -370,7 +392,9 @@ export class SyncConnection {
           const toDelete = this.pool
             .getAll(meta.name)
             .filter(
-              (m) => (m as unknown as Record<string, unknown>)[inverseKey] === deletedModelId,
+              (m) =>
+                (m as unknown as Record<string, unknown>)[inverseKey] ===
+                deletedModelId,
             );
           for (const m of toDelete) {
             this.pool.remove(meta.name, m.id);
@@ -390,7 +414,9 @@ export class SyncConnection {
           const toDelete = this.pool
             .getAll(meta.name)
             .filter(
-              (m) => (m as unknown as Record<string, unknown>)[propMeta.name] === deletedModelId,
+              (m) =>
+                (m as unknown as Record<string, unknown>)[propMeta.name] ===
+                deletedModelId,
             );
           for (const m of toDelete) {
             this.pool.remove(meta.name, m.id);
@@ -416,7 +442,10 @@ export class SyncConnection {
    * After an insert: invalidate collections on the parent model.
    * e.g. new Issue with teamId "t-eng" → invalidate Team("t-eng").issues
    */
-  private invalidateAffectedCollections(modelName: string, data: Record<string, unknown>) {
+  private invalidateAffectedCollections(
+    modelName: string,
+    data: Record<string, unknown>,
+  ) {
     const modelMeta = ModelRegistry.getModelMeta(modelName);
     if (modelMeta == null) {
       return;
@@ -435,7 +464,11 @@ export class SyncConnection {
         continue;
       }
 
-      this.invalidateCollectionsOnParent(propMeta.referenceTo, parentId as string, modelName);
+      this.invalidateCollectionsOnParent(
+        propMeta.referenceTo,
+        parentId as string,
+        modelName,
+      );
     }
   }
 
@@ -454,7 +487,10 @@ export class SyncConnection {
     }
 
     for (const [propName, propMeta] of modelMeta.properties) {
-      if (propMeta.type !== PropertyType.Reference || propMeta.referenceTo == null) {
+      if (
+        propMeta.type !== PropertyType.Reference ||
+        propMeta.referenceTo == null
+      ) {
         continue;
       }
       const oldId = oldValues[propName];
@@ -464,10 +500,18 @@ export class SyncConnection {
       }
 
       if (oldId != null) {
-        this.invalidateCollectionsOnParent(propMeta.referenceTo, oldId as string, modelName);
+        this.invalidateCollectionsOnParent(
+          propMeta.referenceTo,
+          oldId as string,
+          modelName,
+        );
       }
       if (newId != null) {
-        this.invalidateCollectionsOnParent(propMeta.referenceTo, newId as string, modelName);
+        this.invalidateCollectionsOnParent(
+          propMeta.referenceTo,
+          newId as string,
+          modelName,
+        );
       }
     }
   }
@@ -484,12 +528,19 @@ export class SyncConnection {
     }
 
     for (const [propName, propMeta] of modelMeta.properties) {
-      if (propMeta.type !== PropertyType.Reference || propMeta.referenceTo == null) {
+      if (
+        propMeta.type !== PropertyType.Reference ||
+        propMeta.referenceTo == null
+      ) {
         continue;
       }
       const parentId = (model as unknown as Record<string, unknown>)[propName];
       if (parentId != null) {
-        this.invalidateCollectionsOnParent(propMeta.referenceTo, parentId as string, modelName);
+        this.invalidateCollectionsOnParent(
+          propMeta.referenceTo,
+          parentId as string,
+          modelName,
+        );
       }
     }
   }
@@ -517,7 +568,12 @@ export class SyncConnection {
       ) {
         const collection =
           (parent as unknown as Record<string, unknown>).__collections != null
-            ? (parent.__collections as Record<string, { invalidate?: () => void }>)[propName]
+            ? (
+                parent.__collections as Record<
+                  string,
+                  { invalidate?: () => void }
+                >
+              )[propName]
             : undefined;
         if (collection?.invalidate != null) {
           collection.invalidate();

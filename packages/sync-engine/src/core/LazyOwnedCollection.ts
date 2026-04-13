@@ -20,11 +20,14 @@ import { runInAction } from "mobx";
 import type { BaseModel } from "./BaseModel";
 import { LazyCollectionBase, CollectionState } from "./LazyCollection";
 
-export class LazyOwnedCollection<T extends BaseModel = BaseModel> extends LazyCollectionBase<T> {
+export class LazyOwnedCollection<
+  T extends BaseModel = BaseModel,
+> extends LazyCollectionBase<T> {
   /** Live getter — reads the current IDs array from the parent model each call. */
   private idsGetter: () => string[];
 
-  private loader: ((modelName: string, ids: string[]) => Promise<T[]>) | null = null;
+  private loader: ((modelName: string, ids: string[]) => Promise<T[]>) | null =
+    null;
 
   constructor(referencedModelName: string, idsGetter: () => string[]) {
     super(referencedModelName);
@@ -40,7 +43,9 @@ export class LazyOwnedCollection<T extends BaseModel = BaseModel> extends LazyCo
    * Resolve items already in the ObjectPool synchronously.
    * Looks up each ID directly — no index query needed.
    */
-  resolveFromPool(pool: { getById(name: string, id: string): BaseModel | undefined }): T[] {
+  resolveFromPool(pool: {
+    getById(name: string, id: string): BaseModel | undefined;
+  }): T[] {
     return this.idsGetter()
       .map((id) => pool.getById(this.referencedModelName, id) as T | undefined)
       .filter((m): m is T => m != null);

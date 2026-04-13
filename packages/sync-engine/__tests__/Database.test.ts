@@ -36,7 +36,9 @@ describe("Database", () => {
 
   describe("writeModels / readAllModels / readModel", () => {
     it("writes and reads back a single record", async () => {
-      await db.writeModels("TestTask", [{ id: "t1", title: "Hello", done: false }]);
+      await db.writeModels("TestTask", [
+        { id: "t1", title: "Hello", done: false },
+      ]);
       const all = await db.readAllModels("TestTask");
       expect(all).toHaveLength(1);
       expect(all[0]).toMatchObject({ id: "t1", title: "Hello" });
@@ -107,20 +109,32 @@ describe("Database", () => {
         { id: "t3", projectId: "proj-A" },
       ]);
 
-      const results = await db.readModelsByIndex("TestTask", "projectId", "proj-A");
+      const results = await db.readModelsByIndex(
+        "TestTask",
+        "projectId",
+        "proj-A",
+      );
       expect(results).toHaveLength(2);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect(results.map((r: any) => r.id).sort()).toEqual(["t1", "t3"]);
     });
 
     it("returns [] for an unknown store", async () => {
-      const results = await db.readModelsByIndex("UnknownModel", "field", "value");
+      const results = await db.readModelsByIndex(
+        "UnknownModel",
+        "field",
+        "value",
+      );
       expect(results).toEqual([]);
     });
 
     it("returns [] when no records match", async () => {
       await db.writeModels("TestTask", [{ id: "t1", projectId: "other" }]);
-      const results = await db.readModelsByIndex("TestTask", "projectId", "proj-Z");
+      const results = await db.readModelsByIndex(
+        "TestTask",
+        "projectId",
+        "proj-Z",
+      );
       expect(results).toHaveLength(0);
     });
   });
@@ -189,7 +203,7 @@ describe("Database", () => {
       const key1 = await db.cacheTransaction({ action: "U", modelId: "t1" });
       const key2 = await db.cacheTransaction({ action: "I", modelId: "t2" });
       expect(key1).toBeGreaterThan(0);
-      expect((key2 as number)).toBeGreaterThan(key1 as number);
+      expect(key2 as number).toBeGreaterThan(key1 as number);
     });
 
     it("getCachedTransactions returns all cached entries", async () => {

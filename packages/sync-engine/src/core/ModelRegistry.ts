@@ -17,7 +17,10 @@ class ModelRegistryImpl {
   private cachedHash: string | null = null;
 
   /** Register a model class. Returns existing metadata if already registered. */
-  registerModel(name: string, ctor: new (...args: unknown[]) => unknown): ModelMeta {
+  registerModel(
+    name: string,
+    ctor: new (...args: unknown[]) => unknown,
+  ): ModelMeta {
     if (!this.models.has(name)) {
       this.models.set(name, {
         name,
@@ -49,7 +52,11 @@ class ModelRegistryImpl {
    * Used by @Reference to promote a user-declared @Property to PropertyType.Reference,
    * adding referenceTo / onDelete / nullable without losing indexed / serializer etc.
    */
-  updateProperty(modelName: string, propertyName: string, updates: Partial<PropertyMeta>) {
+  updateProperty(
+    modelName: string,
+    propertyName: string,
+    updates: Partial<PropertyMeta>,
+  ) {
     const meta = this.models.get(modelName);
     if (meta == null) {
       throw new Error(`Model "${modelName}" not registered`);
@@ -98,10 +105,13 @@ class ModelRegistryImpl {
       return this.cachedHash;
     }
 
-    const sorted = [...this.models.entries()].sort(([a], [b]) => a.localeCompare(b));
+    const sorted = [...this.models.entries()].sort(([a], [b]) =>
+      a.localeCompare(b),
+    );
     const parts = sorted.map(([name, meta]) => {
       const props = [...meta.properties.keys()].sort().join(",");
-      const partial = meta.loadStrategy === LoadStrategy.Partial ? ":partial" : "";
+      const partial =
+        meta.loadStrategy === LoadStrategy.Partial ? ":partial" : "";
       return `${name}:v${meta.schemaVersion}${partial}:[${props}]`;
     });
 

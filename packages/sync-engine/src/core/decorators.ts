@@ -210,7 +210,8 @@ export function ReferenceCollection(
     // Convention: parentModelName (lowercased first char) + "Id"
     // Override with inverseOf when convention doesn't match.
     const inverseKey =
-      opts.inverseOf ?? modelName.charAt(0).toLowerCase() + modelName.slice(1) + "Id";
+      opts.inverseOf ??
+      modelName.charAt(0).toLowerCase() + modelName.slice(1) + "Id";
 
     ModelRegistry.registerProperty(modelName, {
       name: key,
@@ -300,7 +301,10 @@ export function ReferenceArray(referenceTo: string) {
 //   public issues: LazyOwnedCollection<Issue>;
 // ---------------------------------------------------------------------------
 
-export function OwnedCollection(referenceTo: string, opts: { idsField: string; lazy?: boolean }) {
+export function OwnedCollection(
+  referenceTo: string,
+  opts: { idsField: string; lazy?: boolean },
+) {
   // Legacy decorator target — no better type exists for prototype manipulation
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return function (target: any, key: string) {

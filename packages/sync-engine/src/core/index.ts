@@ -32,7 +32,11 @@ export type {
 } from "./StoreManager";
 
 // Lazy loading
-export { LazyReferenceCollection, LazyBackReference, CollectionState } from "./LazyCollection";
+export {
+  LazyReferenceCollection,
+  LazyBackReference,
+  CollectionState,
+} from "./LazyCollection";
 
 // Transactions
 export {

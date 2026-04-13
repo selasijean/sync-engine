@@ -32,7 +32,11 @@ const dateDeserializer = (v: unknown) => new Date(v as string);
 import type { StoreManager } from "@sync-engine/StoreManager";
 
 /** Hydrate, make observable, and register a model in the given StoreManager's pool. */
-export function addToPool(sm: StoreManager, modelName: string, model: BaseModel) {
+export function addToPool(
+  sm: StoreManager,
+  modelName: string,
+  model: BaseModel,
+) {
   model.makeModelObservable();
   sm.objectPool.put(modelName, model);
 }
@@ -44,7 +48,10 @@ export function addToPool(sm: StoreManager, modelName: string, model: BaseModel)
 export function hydrateObservable(
   model: BaseModel,
   data: Record<string, unknown>,
-  store: { getById: (...args: unknown[]) => unknown; put: (...args: unknown[]) => void } = {
+  store: {
+    getById: (...args: unknown[]) => unknown;
+    put: (...args: unknown[]) => void;
+  } = {
     getById: () => undefined,
     put: () => {},
   },
@@ -56,14 +63,20 @@ export function hydrateObservable(
 
 type FakeStoreManagerOverrides = {
   commitCreate?: (model: BaseModel) => void;
-  commitUpdate?: (id: string, name: string, changes: Record<string, unknown>) => void;
+  commitUpdate?: (
+    id: string,
+    name: string,
+    changes: Record<string, unknown>,
+  ) => void;
 };
 
 /**
  * Returns a minimal fake StoreManager suitable for wiring BaseModel.storeManager in tests.
  * Pass overrides to spy on specific methods.
  */
-export function makeFakeStoreManager(overrides: FakeStoreManagerOverrides = {}): StoreManager {
+export function makeFakeStoreManager(
+  overrides: FakeStoreManagerOverrides = {},
+): StoreManager {
   return {
     objectPool: { getById: () => undefined, put: () => {} },
     commitCreate: overrides.commitCreate ?? (() => {}),

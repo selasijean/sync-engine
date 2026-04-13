@@ -102,7 +102,11 @@ export class TransactionQueue {
       return;
     }
     if (this.activeBatchTxs.length > 0 && !this.suppressUndoStack) {
-      this.undoStack.push({ kind: "batch", batchId, txs: [...this.activeBatchTxs] });
+      this.undoStack.push({
+        kind: "batch",
+        batchId,
+        txs: [...this.activeBatchTxs],
+      });
       if (this.undoStack.length > this.undoLimit) {
         this.undoStack.shift();
       }
@@ -114,19 +118,31 @@ export class TransactionQueue {
 
   // ── Enqueue methods (one per transaction type) ────────────────────────────
 
-  async enqueueUpdate(modelId: string, modelName: string, changes: Record<string, PropertyChange>) {
+  async enqueueUpdate(
+    modelId: string,
+    modelName: string,
+    changes: Record<string, PropertyChange>,
+  ) {
     const tx = new UpdateTransaction(modelId, modelName, changes);
     await this.enqueue(tx);
     return tx;
   }
 
-  async enqueueCreate(modelId: string, modelName: string, data: Record<string, unknown>) {
+  async enqueueCreate(
+    modelId: string,
+    modelName: string,
+    data: Record<string, unknown>,
+  ) {
     await this.enqueue(new CreateTransaction(modelId, modelName, data));
   }
 
   async enqueueDelete(model: BaseModel) {
     const meta = ModelRegistry.getMetaForInstance(model);
-    const tx = new DeleteTransaction(model.id, meta?.name ?? "Unknown", model.serialize());
+    const tx = new DeleteTransaction(
+      model.id,
+      meta?.name ?? "Unknown",
+      model.serialize(),
+    );
     if (meta != null) {
       this.pool.remove(meta.name, model.id);
     } // optimistic removal
@@ -135,7 +151,11 @@ export class TransactionQueue {
 
   async enqueueArchive(model: BaseModel) {
     const meta = ModelRegistry.getMetaForInstance(model);
-    const tx = new ArchiveTransaction(model.id, meta?.name ?? "Unknown", model.serialize());
+    const tx = new ArchiveTransaction(
+      model.id,
+      meta?.name ?? "Unknown",
+      model.serialize(),
+    );
     if (meta != null) {
       this.pool.remove(meta.name, model.id);
     }
@@ -190,7 +210,9 @@ export class TransactionQueue {
       const response = await this.sender(batch.map((tx) => tx.serialize()));
       this.executing = this.executing.filter((tx) => !batch.includes(tx));
 
-      const batchKeys = batch.map((tx) => tx.idbKey).filter((k): k is number => k != null);
+      const batchKeys = batch
+        .map((tx) => tx.idbKey)
+        .filter((k): k is number => k != null);
       if (response.success) {
         await this.database.deleteCachedTransactions(batchKeys);
         for (const tx of batch) {
@@ -236,14 +258,22 @@ export class TransactionQueue {
 
   // ── Rebasing (called by SyncConnection for I/U/V/C actions) ───────────────
 
-  rebaseAll(modelId: string, modelName: string, serverData: Record<string, unknown>) {
+  rebaseAll(
+    modelId: string,
+    modelName: string,
+    serverData: Record<string, unknown>,
+  ) {
     const model = this.pool.getById(modelName, modelId);
     if (model == null) {
       return;
     }
 
     // Check all active queues for conflicting UpdateTransactions
-    const allActive = [...this.pending, ...this.executing, ...this.awaitingSync];
+    const allActive = [
+      ...this.pending,
+      ...this.executing,
+      ...this.awaitingSync,
+    ];
     for (const tx of allActive) {
       if (
         tx instanceof UpdateTransaction &&
@@ -267,7 +297,10 @@ export class TransactionQueue {
       }
     } else if (tx instanceof CreateTransaction) {
       this.pool.remove(tx.modelName, tx.modelId);
-    } else if (tx instanceof DeleteTransaction || tx instanceof ArchiveTransaction) {
+    } else if (
+      tx instanceof DeleteTransaction ||
+      tx instanceof ArchiveTransaction
+    ) {
       const meta = ModelRegistry.getModelMeta(tx.modelName);
       if (meta != null) {
         const inst = new meta.ctor() as BaseModel;
@@ -386,7 +419,11 @@ export class TransactionQueue {
     // the model from the pool (the "create after sleep doesn't show up" bug).
     // UPDATE and DELETE are idempotent on the server, but skipping is still correct.
     const inFlight = new Set<string>();
-    for (const tx of [...this.pending, ...this.executing, ...this.awaitingSync]) {
+    for (const tx of [
+      ...this.pending,
+      ...this.executing,
+      ...this.awaitingSync,
+    ]) {
       inFlight.add(`${tx.action}:${tx.modelName}:${tx.modelId}`);
     }
 
