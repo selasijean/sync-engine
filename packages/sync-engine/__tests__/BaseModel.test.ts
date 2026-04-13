@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { BaseModel } from "@sync-engine/BaseModel";
-import { TestTask, TestProject } from "./fixtures";
+import { TestTask, TestProject, hydrateObservable, makeFakeStoreManager } from "./fixtures";
 
 // We need BaseModel.storeManager to be null between tests so auto-commit
 // doesn't fire into a stale StoreManager.
@@ -147,6 +147,98 @@ describe("BaseModel", () => {
       task.title = "B";
       task.save();
       expect(task.updatedAt.getTime()).toBeGreaterThan(before.getTime());
+    });
+  });
+
+  // ── update ──────────────────────────────────────────────────────────────────
+
+  describe("update()", () => {
+    describe("new model (store === null)", () => {
+      it("populates fields and makes them readable after makeModelObservable", () => {
+        const task = new TestTask();
+        task.update({ id: "t-1", title: "Hello", done: true });
+        task.makeModelObservable();
+        expect(task.id).toBe("t-1");
+        expect(task.title).toBe("Hello");
+        expect(task.done).toBe(true);
+      });
+
+      it("calls commitCreate via save()", () => {
+        let created: BaseModel | null = null;
+        BaseModel.storeManager = makeFakeStoreManager({
+          commitCreate: (m) => { created = m; },
+        });
+
+        const task = new TestTask();
+        task.update({ title: "From snapshot", done: false });
+        expect(created).toBe(task);
+      });
+    });
+
+    describe("existing pool model (store set)", () => {
+      it("assigns @Property fields and sends changes to server", () => {
+        const commits: unknown[] = [];
+        BaseModel.storeManager = makeFakeStoreManager({
+          commitUpdate: (_id, _name, changes) => { commits.push(changes); },
+        });
+
+        const task = new TestTask();
+        hydrateObservable(task, { id: "t", title: "Old", done: false });
+
+        task.update({ title: "New", done: true });
+        expect(task.title).toBe("New");
+        expect(task.done).toBe(true);
+        expect(commits).toHaveLength(1);
+      });
+
+      it("assigns @Reference FK fields", () => {
+        const task = new TestTask();
+        hydrateObservable(task, { id: "t", projectId: "" });
+
+        task.update({ projectId: "proj-99" });
+        expect(task.projectId).toBe("proj-99");
+      });
+
+      it("ignores @ReferenceCollection keys and leaves the collection unchanged", () => {
+        const proj = new TestProject();
+        hydrateObservable(proj, { id: "p", title: "P" });
+        const collectionBefore = proj.__collections["tasks"];
+
+        proj.update({ tasks: [] as unknown as never });
+        expect(proj.__collections["tasks"]).toBe(collectionBefore);
+      });
+
+      it("ignores unknown keys", () => {
+        const task = new TestTask();
+        hydrateObservable(task, { id: "t", title: "A" });
+
+        task.update({ nonExistent: "x" } as never);
+        expect(task.title).toBe("A");
+      });
+
+      it("does not change id", () => {
+        const task = new TestTask();
+        hydrateObservable(task, { id: "original-id", title: "A" });
+
+        task.update({ id: "hacked-id", title: "B" } as never);
+        expect(task.id).toBe("original-id");
+      });
+
+      it("batches all field assignments into a single commitUpdate with correct values", () => {
+        type ChangeMap = Record<string, { oldValue: unknown; newValue: unknown }>;
+        const commits: ChangeMap[] = [];
+        BaseModel.storeManager = makeFakeStoreManager({
+          commitUpdate: (_id, _name, changes) => { commits.push(changes as ChangeMap); },
+        });
+
+        const task = new TestTask();
+        hydrateObservable(task, { id: "t", title: "Old", done: false });
+
+        task.update({ title: "New", done: true });
+        expect(commits).toHaveLength(1);
+        expect(commits[0]["title"]).toEqual({ oldValue: "Old", newValue: "New" });
+        expect(commits[0]["done"]).toEqual({ oldValue: false, newValue: true });
+      });
     });
   });
 

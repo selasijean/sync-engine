@@ -37,6 +37,42 @@ export function addToPool(sm: StoreManager, modelName: string, model: BaseModel)
   sm.objectPool.put(modelName, model);
 }
 
+/**
+ * Hydrate a model, make it observable, and set a fake store on it —
+ * the minimal setup for testing an existing pool model without a real StoreManager.
+ */
+export function hydrateObservable(
+  model: BaseModel,
+  data: Record<string, unknown>,
+  store: { getById: (...args: unknown[]) => unknown; put: (...args: unknown[]) => void } = {
+    getById: () => undefined,
+    put: () => {},
+  },
+) {
+  model.hydrate(data);
+  model.makeModelObservable();
+  model.store = store as Parameters<typeof addToPool>[0]["objectPool"];
+}
+
+type FakeStoreManagerOverrides = {
+  commitCreate?: (model: BaseModel) => void;
+  commitUpdate?: (id: string, name: string, changes: Record<string, unknown>) => void;
+};
+
+/**
+ * Returns a minimal fake StoreManager suitable for wiring BaseModel.storeManager in tests.
+ * Pass overrides to spy on specific methods.
+ */
+export function makeFakeStoreManager(overrides: FakeStoreManagerOverrides = {}): StoreManager {
+  return {
+    objectPool: { getById: () => undefined, put: () => {} },
+    commitCreate: overrides.commitCreate ?? (() => {}),
+    commitUpdate: overrides.commitUpdate ?? (() => {}),
+    loadCollection: async () => [],
+    loadByIds: async () => [],
+  } as unknown as StoreManager;
+}
+
 // ── TestWorkspace ─────────────────────────────────────────────────────────────
 
 @ClientModel({ loadStrategy: LoadStrategy.Instant })
