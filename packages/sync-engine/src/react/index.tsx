@@ -8,8 +8,13 @@
  */
 
 import React, {
-  createContext, useContext, useState, useEffect,
-  useCallback, useRef, useSyncExternalStore,
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useSyncExternalStore,
 } from "react";
 import { StoreManager, type StoreManagerConfig } from "../core/StoreManager";
 import { BootstrapPhase } from "../core/types";
@@ -25,19 +30,28 @@ export interface SyncStatus {
   error?: string;
 }
 
-const SyncContext = createContext<{ sm: StoreManager; status: SyncStatus } | null>(null);
+const SyncContext = createContext<{
+  sm: StoreManager;
+  status: SyncStatus;
+} | null>(null);
 
 // ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
 
-export function SyncProvider({ config, children, fallback }: {
+export function SyncProvider({
+  config,
+  children,
+  fallback,
+}: {
   config: StoreManagerConfig;
   children: React.ReactNode;
   /** Shown while bootstrap is in progress. */
   fallback?: React.ReactNode;
 }) {
-  const [status, setStatus] = useState<SyncStatus>({ phase: BootstrapPhase.Idle });
+  const [status, setStatus] = useState<SyncStatus>({
+    phase: BootstrapPhase.Idle,
+  });
   const smRef = useRef<StoreManager | null>(null);
   const cfgRef = useRef(config);
   cfgRef.current = config;
@@ -49,7 +63,9 @@ export function SyncProvider({ config, children, fallback }: {
   // visible forever. Reloading on persisted pageshow breaks out of that state.
   useEffect(() => {
     const handlePageShow = (e: PageTransitionEvent) => {
-      if (e.persisted) { window.location.reload(); }
+      if (e.persisted) {
+        window.location.reload();
+      }
     };
     window.addEventListener("pageshow", handlePageShow);
     return () => window.removeEventListener("pageshow", handlePageShow);
@@ -60,10 +76,16 @@ export function SyncProvider({ config, children, fallback }: {
 
     const sm = new StoreManager({
       ...cfgRef.current,
-      onPhaseChange: (phase, detail) => { if (active) setStatus({ phase, detail }); },
+      onPhaseChange: (phase, detail) => {
+        if (active) { setStatus({ phase, detail }); }
+      },
     });
     smRef.current = sm;
-    sm.bootstrap().catch(err => { if (active) setStatus({ phase: BootstrapPhase.Error, error: String(err) }); });
+    sm.bootstrap().catch((err) => {
+      if (active) {
+        setStatus({ phase: BootstrapPhase.Error, error: String(err) });
+      }
+    });
     return () => {
       active = false;
       sm.teardown();
@@ -74,10 +96,18 @@ export function SyncProvider({ config, children, fallback }: {
   if (smRef.current == null) {
     return fallback != null ? <>{fallback}</> : null;
   }
-  if (status.phase !== BootstrapPhase.Ready && status.phase !== BootstrapPhase.Error && fallback != null) {
+  if (
+    status.phase !== BootstrapPhase.Ready &&
+    status.phase !== BootstrapPhase.Error &&
+    fallback != null
+  ) {
     return <>{fallback}</>;
   }
-  return <SyncContext.Provider value={{ sm: smRef.current, status }}>{children}</SyncContext.Provider>;
+  return (
+    <SyncContext.Provider value={{ sm: smRef.current, status }}>
+      {children}
+    </SyncContext.Provider>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -86,7 +116,9 @@ export function SyncProvider({ config, children, fallback }: {
 
 export function useSyncEngine() {
   const ctx = useContext(SyncContext);
-  if (ctx == null) {throw new Error("useSyncEngine() must be inside <SyncProvider>");}
+  if (ctx == null) {
+    throw new Error("useSyncEngine() must be inside <SyncProvider>");
+  }
   return ctx;
 }
 
@@ -128,7 +160,9 @@ export function useModels<T = any>(modelName: string): T[] {
 
   const models = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
-  if (status.phase !== BootstrapPhase.Ready) {return [];}
+  if (status.phase !== BootstrapPhase.Ready) {
+    return [];
+  }
   return models as T[];
 }
 
@@ -140,7 +174,10 @@ export function useModels<T = any>(modelName: string): T[] {
 // ---------------------------------------------------------------------------
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function useModel<T = any>(modelName: string, id: string | null | undefined): T | null {
+export function useModel<T = any>(
+  modelName: string,
+  id: string | null | undefined,
+): T | null {
   const { sm, status } = useSyncEngine();
   const pool = sm.objectPool;
 
@@ -150,13 +187,15 @@ export function useModel<T = any>(modelName: string, id: string | null | undefin
   );
 
   const getSnapshot = useCallback(
-    () => id != null ? pool.getById(modelName, id) ?? null : null,
+    () => (id != null ? (pool.getById(modelName, id) ?? null) : null),
     [pool, modelName, id],
   );
 
   const model = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
-  if (status.phase !== BootstrapPhase.Ready) {return null;}
+  if (status.phase !== BootstrapPhase.Ready) {
+    return null;
+  }
   return model as T | null;
 }
 
@@ -181,24 +220,36 @@ export function useLazyCollection<T = any>(
   const gen = useRef(0);
 
   const doLoad = useCallback(async () => {
-    if (value == null || status.phase !== BootstrapPhase.Ready) {return;}
+    if (value == null || status.phase !== BootstrapPhase.Ready) {
+      return;
+    }
     const g = ++gen.current;
     setIsLoading(true);
     setError(null);
     try {
       const result = await sm.loadCollection(modelName, indexKey, value);
-      if (g === gen.current) { setItems(result as T[]); setIsLoading(false); }
+      if (g === gen.current) {
+        setItems(result as T[]);
+        setIsLoading(false);
+      }
     } catch (e) {
-      if (g === gen.current) { setError(e as Error); setIsLoading(false); }
+      if (g === gen.current) {
+        setError(e as Error);
+        setIsLoading(false);
+      }
     }
   }, [sm, modelName, indexKey, value, status.phase]);
 
   // Initial load
-  useEffect(() => { doLoad(); }, [doLoad]);
+  useEffect(() => {
+    doLoad();
+  }, [doLoad]);
 
   // Re-load when pool changes (e.g. delta packet adds a new Issue to this team)
   useEffect(() => {
-    if (value == null || status.phase !== BootstrapPhase.Ready) {return;}
+    if (value == null || status.phase !== BootstrapPhase.Ready) {
+      return;
+    }
     return sm.objectPool.subscribe(modelName, doLoad);
   }, [sm, modelName, value, status.phase, doLoad]);
 
@@ -221,23 +272,35 @@ export function useLazyRef<T = any>(
   const gen = useRef(0);
 
   const doLoad = useCallback(async () => {
-    if (id == null || status.phase !== BootstrapPhase.Ready) {return;}
+    if (id == null || status.phase !== BootstrapPhase.Ready) {
+      return;
+    }
     const g = ++gen.current;
     setIsLoading(true);
     setError(null);
     try {
       const result = await sm.loadOne(modelName, id);
-      if (g === gen.current) { setValue(result as T | null); setIsLoading(false); }
+      if (g === gen.current) {
+        setValue(result as T | null);
+        setIsLoading(false);
+      }
     } catch (e) {
-      if (g === gen.current) { setError(e as Error); setIsLoading(false); }
+      if (g === gen.current) {
+        setError(e as Error);
+        setIsLoading(false);
+      }
     }
   }, [sm, modelName, id, status.phase]);
 
-  useEffect(() => { doLoad(); }, [doLoad]);
+  useEffect(() => {
+    doLoad();
+  }, [doLoad]);
 
   // Re-load on pool changes (e.g. delta packet updates this model)
   useEffect(() => {
-    if (id == null || status.phase !== BootstrapPhase.Ready) {return;}
+    if (id == null || status.phase !== BootstrapPhase.Ready) {
+      return;
+    }
     return sm.objectPool.subscribe(modelName, doLoad);
   }, [sm, modelName, id, status.phase, doLoad]);
 
@@ -287,19 +350,27 @@ export function useCollection<T = any>(
 
   // Subscribe to collection invalidation events
   useEffect(() => {
-    if (collection == null) {return;}
-    return collection.subscribe(() => forceRender(n => n + 1));
+    if (collection == null) {
+      return;
+    }
+    return collection.subscribe(() => forceRender((n) => n + 1));
   }, [collection]);
 
   // Trigger load on mount or after invalidation
   useEffect(() => {
     if (collection != null && !collection.isLoaded && !collection.isLoading) {
-      collection.load().then(() => forceRender(n => n + 1));
+      collection.load().then(() => forceRender((n) => n + 1));
     }
   }, [collection, tick]);
 
   if (collection == null) {
-    return { items: [] as T[], isLoading: false, isLoaded: false, error: null, reload: () => {} };
+    return {
+      items: [] as T[],
+      isLoading: false,
+      isLoaded: false,
+      error: null,
+      reload: () => {},
+    };
   }
 
   return {
@@ -326,12 +397,18 @@ export function useBackRef<T = any>(
 
   useEffect(() => {
     if (backRef != null && !backRef.isLoaded && !backRef.isLoading) {
-      backRef.load().then(() => forceRender(n => n + 1));
+      backRef.load().then(() => forceRender((n) => n + 1));
     }
   }, [backRef, tick]);
 
   if (backRef == null) {
-    return { value: null as T | null, isLoading: false, isLoaded: false, error: null, reload: () => {} };
+    return {
+      value: null as T | null,
+      isLoading: false,
+      isLoaded: false,
+      error: null,
+      reload: () => {},
+    };
   }
 
   return {

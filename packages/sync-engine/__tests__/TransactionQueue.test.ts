@@ -7,8 +7,8 @@ import { BaseModel } from "@sync-engine/BaseModel";
 import { TestTask } from "./fixtures";
 
 // Helper: directly invoke the private flush() method and await it.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const flush = (queue: TransactionQueue) =>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (queue as any).flush() as Promise<void>;
 
 let db: Database;
