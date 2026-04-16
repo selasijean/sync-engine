@@ -257,6 +257,68 @@ export function useLazyCollection<T = any>(
 }
 
 // ---------------------------------------------------------------------------
+// useLazyIds — load a specific set of models by ID with loading state
+//
+// The reactive complement to useModel for multiple IDs:
+//
+//   const { items, isLoading } = useLazyIds("Issue", ["id-1", "id-2"]);
+//
+// Calls loadByIds on mount (and when IDs change). Re-renders when the pool
+// changes for this model type (e.g. a delta packet updates one of the items).
+// The ids array is compared by value, so inline arrays won't cause re-fetches.
+// ---------------------------------------------------------------------------
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function useLazyIds<T = any>(
+  modelName: string,
+  ids: string[] | null | undefined,
+) {
+  const { sm, status } = useSyncEngine();
+  const [items, setItems] = useState<T[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const gen = useRef(0);
+
+  // Stable key so inline array literals don't cause infinite re-fetches.
+  const idsKey = ids?.join(",") ?? "";
+
+  const doLoad = useCallback(async () => {
+    if (ids == null || ids.length === 0 || status.phase !== BootstrapPhase.Ready) {
+      return;
+    }
+    const g = ++gen.current;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await sm.loadByIds(modelName, ids);
+      if (g === gen.current) {
+        setItems(result as T[]);
+        setIsLoading(false);
+      }
+    } catch (e) {
+      if (g === gen.current) {
+        setError(e as Error);
+        setIsLoading(false);
+      }
+    }
+  }, [sm, modelName, idsKey, status.phase]);
+
+  useEffect(() => {
+    doLoad();
+  }, [doLoad]);
+
+  // Re-render when pool changes (e.g. delta packet updates one of the items)
+  useEffect(() => {
+    if (idsKey === "" || status.phase !== BootstrapPhase.Ready) {
+      return;
+    }
+    return sm.objectPool.subscribe(modelName, doLoad);
+  }, [sm, modelName, idsKey, status.phase, doLoad]);
+
+  return { items, isLoading, error, reload: doLoad };
+}
+
+// ---------------------------------------------------------------------------
 // useLazyRef — load a single partial/lazy model by ID
 // ---------------------------------------------------------------------------
 
