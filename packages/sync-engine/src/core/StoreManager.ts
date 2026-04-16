@@ -157,6 +157,13 @@ export interface StoreManagerConfig {
     value: string,
   ) => Promise<Record<string, unknown>[]>;
 
+  /** Batch ID lookup used by loadByIds — receives all missing IDs at once so
+   * the caller can make a single server request instead of one per ID. */
+  onDemandBatchFetcher?: (
+    modelName: string,
+    ids: string[],
+  ) => Promise<Record<string, unknown>[]>;
+
   onPhaseChange?: (phase: BootstrapPhase, detail?: string) => void;
   onDeltaPacket?: (packet: DeltaPacket) => void;
   onReady?: () => void;
@@ -852,10 +859,65 @@ export class StoreManager {
 
   /** Load multiple models by ID (for OwnedCollection resolution). */
   async loadByIds(modelName: string, ids: string[]): Promise<BaseModel[]> {
-    const results = await Promise.all(
-      ids.map((id) => this.loadOne(modelName, id)),
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const meta = ModelRegistry.getModelMeta(modelName);
+    if (meta == null) {
+      return [];
+    }
+
+    const missingFromPool = ids.filter(
+      (id) => this.objectPool.getById(modelName, id) == null,
     );
-    return results.filter((m): m is BaseModel => m != null);
+
+    if (missingFromPool.length > 0) {
+      const idbResults = await Promise.all(
+        missingFromPool.map((id) => this.database.readModel(modelName, id)),
+      );
+
+      const stillMissing: string[] = [];
+      for (let i = 0; i < missingFromPool.length; i++) {
+        const record = idbResults[i];
+        if (record != null) {
+          this.objectPool.hydrateAndPut(modelName, meta, record);
+        } else {
+          stillMissing.push(missingFromPool[i]);
+        }
+      }
+
+      if (stillMissing.length > 0) {
+        const unloaded = stillMissing.filter(
+          (id) => !this.loadedIds.has(`${modelName}:${id}`),
+        );
+        if (unloaded.length > 0) {
+          if (this.config.onDemandBatchFetcher != null) {
+            const serverRecords = await this.config.onDemandBatchFetcher(
+              modelName,
+              unloaded,
+            );
+            if (serverRecords.length > 0) {
+              await this.database.writeModels(modelName, serverRecords);
+              for (const record of serverRecords) {
+                this.objectPool.hydrateAndPut(modelName, meta, record);
+              }
+            }
+            for (const id of unloaded) {
+              this.loadedIds.add(`${modelName}:${id}`);
+            }
+          } else {
+            await Promise.all(
+              unloaded.map((id) => this.loadOne(modelName, id)),
+            );
+          }
+        }
+      }
+    }
+
+    return ids
+      .map((id) => this.objectPool.getById(modelName, id))
+      .filter((m): m is BaseModel => m != null);
   }
 
   /** Load a single model by ID (for partial/lazy models not yet in memory). */

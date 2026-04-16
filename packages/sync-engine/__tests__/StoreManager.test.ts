@@ -537,6 +537,261 @@ describe("StoreManager", () => {
     });
   });
 
+  // ── loadByIds — onDemandBatchFetcher ─────────────────────────────────────
+
+  describe("loadByIds() with onDemandBatchFetcher", () => {
+    type OnDemandBatchFetcher = (
+      modelName: string,
+      ids: string[],
+    ) => Promise<Record<string, unknown>[]>;
+    let onDemandBatchFetcher: MockedFunction<OnDemandBatchFetcher>;
+    let managerWithFetcher: StoreManager;
+
+    beforeEach(async () => {
+      onDemandBatchFetcher = vi.fn().mockResolvedValue([]);
+      managerWithFetcher = new StoreManager({
+        workspaceId: crypto.randomUUID(),
+        bootstrapFetcher: vi.fn(),
+        onDemandBatchFetcher,
+      });
+      await managerWithFetcher.database.connect();
+    });
+
+    afterEach(async () => {
+      await managerWithFetcher.teardown();
+    });
+
+    it("returns empty array for empty input", async () => {
+      const results = await managerWithFetcher.loadByIds("TestActivity", []);
+      expect(results).toHaveLength(0);
+      expect(onDemandBatchFetcher).not.toHaveBeenCalled();
+    });
+
+    it("returns models from pool without calling fetcher", async () => {
+      const a1 = new TestActivity();
+      a1.hydrate({ id: "a1", taskId: "t1", text: "pooled" });
+      addToPool(managerWithFetcher, "TestActivity", a1);
+
+      const results = await managerWithFetcher.loadByIds("TestActivity", ["a1"]);
+
+      expect(results).toHaveLength(1);
+      expect(results[0]).toBe(a1);
+      expect(onDemandBatchFetcher).not.toHaveBeenCalled();
+    });
+
+    it("returns models from IDB without calling fetcher", async () => {
+      await managerWithFetcher.database.writeModels("TestActivity", [
+        { id: "a1", taskId: "t1", text: "idb-only" },
+      ]);
+
+      const results = await managerWithFetcher.loadByIds("TestActivity", ["a1"]);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].id).toBe("a1");
+      expect(onDemandBatchFetcher).not.toHaveBeenCalled();
+    });
+
+    it("makes a single batch server call for all missing IDs", async () => {
+      onDemandBatchFetcher.mockResolvedValueOnce([
+        { id: "a1", taskId: "t1", text: "one" },
+        { id: "a2", taskId: "t1", text: "two" },
+      ]);
+
+      const results = await managerWithFetcher.loadByIds("TestActivity", [
+        "a1",
+        "a2",
+      ]);
+
+      expect(onDemandBatchFetcher).toHaveBeenCalledTimes(1);
+      expect(onDemandBatchFetcher).toHaveBeenCalledWith("TestActivity", [
+        "a1",
+        "a2",
+      ]);
+      expect(results).toHaveLength(2);
+    });
+
+    it("only fetches IDs not already in pool or IDB", async () => {
+      const a1 = new TestActivity();
+      a1.hydrate({ id: "a1", taskId: "t1", text: "pooled" });
+      addToPool(managerWithFetcher, "TestActivity", a1);
+
+      await managerWithFetcher.database.writeModels("TestActivity", [
+        { id: "a2", taskId: "t1", text: "idb" },
+      ]);
+
+      onDemandBatchFetcher.mockResolvedValueOnce([
+        { id: "a3", taskId: "t1", text: "server" },
+      ]);
+
+      const results = await managerWithFetcher.loadByIds("TestActivity", [
+        "a1",
+        "a2",
+        "a3",
+      ]);
+
+      expect(onDemandBatchFetcher).toHaveBeenCalledWith("TestActivity", ["a3"]);
+      expect(results).toHaveLength(3);
+    });
+
+    it("hydrates server records into the pool", async () => {
+      onDemandBatchFetcher.mockResolvedValueOnce([
+        { id: "a1", taskId: "t1", text: "fetched" },
+      ]);
+
+      await managerWithFetcher.loadByIds("TestActivity", ["a1"]);
+
+      expect(
+        managerWithFetcher.objectPool.getById("TestActivity", "a1"),
+      ).toBeDefined();
+    });
+
+    it("persists server records to IDB", async () => {
+      onDemandBatchFetcher.mockResolvedValueOnce([
+        { id: "a1", taskId: "t1", text: "persisted" },
+      ]);
+
+      await managerWithFetcher.loadByIds("TestActivity", ["a1"]);
+
+      const idbRecord = await managerWithFetcher.database.readModel(
+        "TestActivity",
+        "a1",
+      );
+      expect(idbRecord).not.toBeNull();
+      expect(idbRecord!.text).toBe("persisted");
+    });
+
+    it("does not call fetcher again for the same IDs on repeat calls", async () => {
+      onDemandBatchFetcher.mockResolvedValue([
+        { id: "a1", taskId: "t1", text: "x" },
+      ]);
+
+      await managerWithFetcher.loadByIds("TestActivity", ["a1"]);
+      await managerWithFetcher.loadByIds("TestActivity", ["a1"]);
+
+      expect(onDemandBatchFetcher).toHaveBeenCalledTimes(1);
+    });
+
+    it("omits IDs the server does not return", async () => {
+      onDemandBatchFetcher.mockResolvedValueOnce([
+        { id: "a1", taskId: "t1", text: "found" },
+      ]);
+
+      const results = await managerWithFetcher.loadByIds("TestActivity", [
+        "a1",
+        "a2",
+      ]);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].id).toBe("a1");
+    });
+  });
+
+  // ── loadByIds — fallback to onDemandFetcher ───────────────────────────────
+
+  describe("loadByIds() fallback to onDemandFetcher", () => {
+    type OnDemandFetcher = (
+      modelName: string,
+      indexKey: string,
+      value: string,
+    ) => Promise<Record<string, unknown>[]>;
+    let onDemandFetcher: MockedFunction<OnDemandFetcher>;
+    let managerWithFetcher: StoreManager;
+
+    beforeEach(async () => {
+      onDemandFetcher = vi.fn().mockResolvedValue([]);
+      managerWithFetcher = new StoreManager({
+        workspaceId: crypto.randomUUID(),
+        bootstrapFetcher: vi.fn(),
+        onDemandFetcher,
+      });
+      await managerWithFetcher.database.connect();
+    });
+
+    afterEach(async () => {
+      await managerWithFetcher.teardown();
+    });
+
+    it("falls back to individual loadOne calls when no batch fetcher is configured", async () => {
+      onDemandFetcher
+        .mockResolvedValueOnce([{ id: "a1", taskId: "t1", text: "one" }])
+        .mockResolvedValueOnce([{ id: "a2", taskId: "t1", text: "two" }]);
+
+      const results = await managerWithFetcher.loadByIds("TestActivity", [
+        "a1",
+        "a2",
+      ]);
+
+      expect(onDemandFetcher).toHaveBeenCalledTimes(2);
+      expect(onDemandFetcher).toHaveBeenCalledWith("TestActivity", "id", "a1");
+      expect(onDemandFetcher).toHaveBeenCalledWith("TestActivity", "id", "a2");
+      expect(results).toHaveLength(2);
+    });
+  });
+
+  // ── loadByIds — no fetcher ────────────────────────────────────────────────
+
+  describe("loadByIds() without fetcher", () => {
+    it("returns models present in pool", async () => {
+      const a1 = new TestActivity();
+      a1.hydrate({ id: "a1", taskId: "t1", text: "pooled" });
+      addToPool(manager, "TestActivity", a1);
+
+      const results = await manager.loadByIds("TestActivity", ["a1"]);
+
+      expect(results).toHaveLength(1);
+      expect(results[0]).toBe(a1);
+    });
+
+    it("returns models present in IDB", async () => {
+      await manager.database.writeModels("TestActivity", [
+        { id: "a1", taskId: "t1", text: "idb" },
+      ]);
+
+      const results = await manager.loadByIds("TestActivity", ["a1"]);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].id).toBe("a1");
+    });
+
+    it("omits IDs not found anywhere", async () => {
+      const results = await manager.loadByIds("TestActivity", ["ghost"]);
+      expect(results).toHaveLength(0);
+    });
+
+    it("preserves request order regardless of storage order", async () => {
+      for (const id of ["a1", "a2", "a3"]) {
+        await manager.database.writeModels("TestActivity", [
+          { id, taskId: "t1", text: id },
+        ]);
+      }
+
+      // Request in non-sequential order to prove results match request, not storage
+      const results = await manager.loadByIds("TestActivity", [
+        "a3",
+        "a1",
+        "a2",
+      ]);
+
+      expect(results.map((r) => r.id)).toEqual(["a3", "a1", "a2"]);
+    });
+
+    it("returns empty array for an unregistered model name", async () => {
+      const results = await manager.loadByIds("UnknownModel", ["x1"]);
+      expect(results).toHaveLength(0);
+    });
+
+    it("handles duplicate IDs by returning the model once per occurrence", async () => {
+      await manager.database.writeModels("TestActivity", [
+        { id: "a1", taskId: "t1", text: "dedup" },
+      ]);
+
+      const results = await manager.loadByIds("TestActivity", ["a1", "a1"]);
+
+      expect(results).toHaveLength(2);
+      expect(results[0]).toBe(results[1]);
+    });
+  });
+
   // ── loadOne — no fetcher ───────────────────────────────────────────────────
 
   describe("loadOne() without onDemandFetcher", () => {
