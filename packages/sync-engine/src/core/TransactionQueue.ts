@@ -51,6 +51,8 @@ type UndoEntry =
   | { kind: "single"; tx: BaseTransaction }
   | { kind: "batch"; batchId: string; txs: BaseTransaction[] };
 
+type Listener = () => void;
+
 export class TransactionQueue {
   private database: StorageAdapter;
   private pool: ObjectPool;
@@ -77,6 +79,7 @@ export class TransactionQueue {
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private flushDelay = 50; // ms — batches rapid saves
   private undoLimit: number;
+  private listeners = new Set<Listener>();
 
   constructor(database: StorageAdapter, pool: ObjectPool, undoLimit = 100) {
     this.database = database;
@@ -86,6 +89,17 @@ export class TransactionQueue {
 
   setSender(sender: TransactionSender) {
     this.sender = sender;
+  }
+
+  subscribe(listener: Listener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private notify() {
+    this.listeners.forEach((listener) => listener());
   }
 
   // ── Batch API ─────────────────────────────────────────────────────────────
@@ -111,6 +125,7 @@ export class TransactionQueue {
         this.undoStack.shift();
       }
       this.redoStack = [];
+      this.notify();
     }
     this.activeBatchId = null;
     this.activeBatchTxs = [];
@@ -175,6 +190,7 @@ export class TransactionQueue {
         this.undoStack.shift();
       }
       this.redoStack = [];
+      this.notify();
     }
 
     // Add to pending and schedule flush synchronously so callers can immediately
@@ -353,6 +369,7 @@ export class TransactionQueue {
     }
     this.endBatch(batchId);
     this.suppressUndoStack = false;
+    this.notify();
     return txs;
   }
 
@@ -395,6 +412,7 @@ export class TransactionQueue {
     }
     this.endBatch(batchId);
     this.suppressUndoStack = false;
+    this.notify();
     return txs;
   }
 

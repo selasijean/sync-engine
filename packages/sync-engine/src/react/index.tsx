@@ -77,6 +77,7 @@ export function SyncProvider({
     const sm = new StoreManager({
       ...cfgRef.current,
       onPhaseChange: (phase, detail) => {
+        cfgRef.current.onPhaseChange?.(phase, detail);
         if (active) {
           setStatus({ phase, detail });
         }
@@ -389,11 +390,28 @@ export function useBatch() {
 
 export function useUndoRedo() {
   const { sm } = useSyncEngine();
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => sm.transactionQueue.subscribe(onStoreChange),
+    [sm],
+  );
+  const getSnapshot = useCallback(
+    () =>
+      `${sm.transactionQueue.undoDepth}:${sm.transactionQueue.redoDepth}`,
+    [sm],
+  );
+  const [undoDepth, redoDepth] = useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    getSnapshot,
+  )
+    .split(":")
+    .map(Number);
+
   return {
     undo: useCallback(() => sm.undo(), [sm]),
     redo: useCallback(() => sm.redo(), [sm]),
-    canUndo: sm.transactionQueue.undoDepth > 0,
-    canRedo: sm.transactionQueue.redoDepth > 0,
+    canUndo: undoDepth > 0,
+    canRedo: redoDepth > 0,
   };
 }
 

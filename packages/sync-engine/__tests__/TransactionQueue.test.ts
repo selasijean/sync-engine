@@ -81,6 +81,29 @@ describe("TransactionQueue", () => {
       });
       expect(queue.redoDepth).toBe(0);
     });
+
+    it("notifies subscribers when undo/redo availability changes", async () => {
+      const listener = vi.fn();
+      queue.subscribe(listener);
+
+      await queue.enqueueUpdate("t1", "TestTask", {
+        title: { oldValue: "A", newValue: "B" },
+      });
+
+      expect(listener).toHaveBeenCalledOnce();
+    });
+
+    it("stops notifying after unsubscribe", async () => {
+      const listener = vi.fn();
+      const unsubscribe = queue.subscribe(listener);
+      unsubscribe();
+
+      await queue.enqueueUpdate("t1", "TestTask", {
+        title: { oldValue: "A", newValue: "B" },
+      });
+
+      expect(listener).not.toHaveBeenCalled();
+    });
   });
 
   // ── flush / sender ─────────────────────────────────────────────────────────
