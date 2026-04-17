@@ -347,7 +347,7 @@ export class StoreManager {
       // engine is marked ready. The UI is already interactive at this point.
       const deferredModels = allModelNames.filter((n) => deferred.has(n));
       if (deferredModels.length > 0) {
-        this.fetchDeferredModels(deferredModels, res.lastSyncId);
+        this.fetchDeferredModels(deferredModels);
       }
     } else {
       // Single-phase: fetch everything at once
@@ -381,13 +381,13 @@ export class StoreManager {
   /**
    * Background fetch for deferred models (phase 2).
    * Runs after the engine is ready — the UI is already interactive.
-   * Fetches as partial (since the lastSyncId we already have) to pick up
-   * any changes that happened during phase 1.
+   * Uses Full bootstrap because the client has never fetched these models before.
+   * Any changes that occurred concurrently during phase 1 are covered by SSE,
+   * which connects before this method runs.
    */
-  private async fetchDeferredModels(modelNames: string[], sinceSyncId: number) {
+  private async fetchDeferredModels(modelNames: string[]) {
     try {
-      const res = await this.config.bootstrapFetcher(BootstrapType.Partial, {
-        sinceSyncId,
+      const res = await this.config.bootstrapFetcher(BootstrapType.Full, {
         onlyModels: modelNames,
       });
       await Promise.all(
