@@ -113,6 +113,10 @@ export class SyncConnection {
     this.openEventSource();
   }
 
+  reconnect() {
+    this.openEventSource();
+  }
+
   disconnect() {
     if (this.reconnectTimer != null) {
       clearTimeout(this.reconnectTimer);

@@ -700,32 +700,137 @@ export class StoreManager {
 
     const models = await this.config.syncGroupFetcher(addedGroups);
 
-    for (const [modelName, records] of Object.entries(models)) {
-      // Write to IDB
-      await this.database.writeModels(modelName, records);
+    await Promise.all(
+      Object.entries(models).map(async ([modelName, records]) => {
+        await this.database.writeModels(modelName, records);
+        this.hydrateInstantModels(modelName, records);
+      }),
+    );
+  }
 
-      // Hydrate instant-load models into the pool
-      const meta = ModelRegistry.getModelMeta(modelName);
-      if (meta?.loadStrategy === LoadStrategy.Instant) {
-        for (const record of records) {
-          const existing = this.objectPool.getById(
-            modelName,
-            record.id as string,
-          );
-          if (existing != null) {
-            // Update existing model with new data
-            for (const [k, v] of Object.entries(record)) {
-              if (k !== "id") {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                (existing as any)[k] = v;
-              }
-            }
-          } else {
-            this.objectPool.hydrateAndPut(modelName, meta, record);
+  /**
+   * Write records for Instant models into the pool. Updates existing instances
+   * in-place; creates new ones via hydrateAndPut for models not yet in memory.
+   */
+  private hydrateInstantModels(
+    modelName: string,
+    records: Record<string, unknown>[],
+  ): void {
+    const meta = ModelRegistry.getModelMeta(modelName);
+    if (meta?.loadStrategy !== LoadStrategy.Instant) {
+      return;
+    }
+    for (const record of records) {
+      const existing = this.objectPool.getById(modelName, record.id as string);
+      if (existing != null) {
+        for (const [k, v] of Object.entries(record)) {
+          if (k !== "id") {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (existing as any)[k] = v;
           }
         }
+      } else {
+        this.objectPool.hydrateAndPut(modelName, meta, record);
       }
     }
+  }
+
+  // ── Sync group lifecycle (user-initiated) ────────────────────────────────
+
+  /**
+   * Activate a sync group: fetch all its models from the server, write to IDB,
+   * hydrate instant-load models into the pool, and reconnect SSE so the server
+   * starts streaming deltas for this group.
+   *
+   * Idempotent — does nothing if the group is already active.
+   *
+   * Requires syncGroupFetcher to be configured.
+   */
+  async activateSyncGroup(groupId: string): Promise<void> {
+    if (this.config.syncGroupFetcher == null) {
+      throw new Error(
+        "activateSyncGroup requires syncGroupFetcher to be configured",
+      );
+    }
+
+    const dbMeta = this.database.currentMeta;
+    if (dbMeta == null) {
+      return;
+    }
+    if (dbMeta.subscribedSyncGroups.includes(groupId)) {
+      return;
+    }
+
+    const models = await this.config.syncGroupFetcher([groupId]);
+
+    await Promise.all(
+      Object.entries(models).map(async ([modelName, records]) => {
+        await this.database.writeModels(modelName, records);
+        this.hydrateInstantModels(modelName, records);
+      }),
+    );
+
+    const groups = new Set(dbMeta.subscribedSyncGroups);
+    groups.add(groupId);
+    dbMeta.subscribedSyncGroups = [...groups];
+    await this.database.saveMeta(dbMeta);
+    this.syncConnection?.reconnect();
+  }
+
+  /**
+   * Deactivate a sync group: evict its models from the pool and IDB, update
+   * the subscribed groups list, and reconnect SSE so the server stops streaming
+   * deltas for this group.
+   *
+   * Only models that declare syncGroupField via @ClientModel are evicted.
+   *
+   * Idempotent — does nothing if the group is not currently active.
+   */
+  async deactivateSyncGroup(groupId: string): Promise<void> {
+    const dbMeta = this.database.currentMeta;
+    if (dbMeta == null) {
+      return;
+    }
+    if (!dbMeta.subscribedSyncGroups.includes(groupId)) {
+      return;
+    }
+
+    // Pool eviction is synchronous — do it first before any awaits.
+    for (const modelMeta of ModelRegistry.allModels()) {
+      const field = modelMeta.syncGroupField;
+      if (field == null) {
+        continue;
+      }
+      const toEvict = this.objectPool
+        .getAll(modelMeta.name)
+        .filter((m) => prop(m, field) === groupId);
+      for (const m of toEvict) {
+        this.objectPool.remove(modelMeta.name, m.id);
+        this.loadedIds.delete(`${modelMeta.name}:${m.id}`);
+      }
+      this.loadedCollections.delete(
+        StoreManager.collectionKey(modelMeta.name, field, groupId),
+      );
+    }
+
+    // IDB eviction — parallel across models, cursor-based (no read-then-delete).
+    await Promise.all(
+      ModelRegistry.allModels()
+        .filter((modelMeta) => modelMeta.syncGroupField != null)
+        .map((modelMeta) =>
+          this.database.deleteModelsByIndex(
+            modelMeta.name,
+            modelMeta.syncGroupField!,
+            groupId,
+          ),
+        ),
+    );
+
+    dbMeta.subscribedSyncGroups = dbMeta.subscribedSyncGroups.filter(
+      (g) => g !== groupId,
+    );
+    await this.database.saveMeta(dbMeta);
+    this.syncConnection?.reconnect();
   }
 
   // ── Batch API ─────────────────────────────────────────────────────────────

@@ -189,6 +189,34 @@ export class TestActivity extends BaseModel {
   public task: TestTask;
 }
 
+// ── TestLayeredDriver (sync group scoped model) ───────────────────────────────
+//
+// syncGroupField: "layerId" — the engine automatically indexes this field and
+// uses it to evict records during deactivateSyncGroup().
+
+@ClientModel({ loadStrategy: LoadStrategy.Instant, syncGroupField: "layerId" })
+export class TestLayeredDriver extends BaseModel {
+  @Property()
+  public name = "";
+
+  @Property()
+  public layerId = "";
+}
+
+// ── TestScopelessItem (no syncGroupField) ─────────────────────────────────────
+//
+// Used to verify that models without syncGroupField are NOT evicted when
+// deactivateSyncGroup() is called, even if they happen to have a layerId field.
+
+@ClientModel({ loadStrategy: LoadStrategy.Instant })
+export class TestScopelessItem extends BaseModel {
+  @Property()
+  public label = "";
+
+  @Property()
+  public layerId = "";
+}
+
 // ── TestNote (BackReference cascade via SyncConnection) ───────────────────────
 
 @ClientModel({ loadStrategy: LoadStrategy.Instant })

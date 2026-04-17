@@ -71,6 +71,12 @@ export interface StorageAdapter {
   ): Promise<Record<string, unknown>[]>;
   deleteModel(modelName: string, id: string): Promise<void>;
   deleteModels(modelName: string, ids: string[]): Promise<void>;
+  /** Delete all records matching indexName === value in a single IDB pass. */
+  deleteModelsByIndex(
+    modelName: string,
+    indexName: string,
+    value: string,
+  ): Promise<void>;
   clearModelStore(modelName: string): Promise<void>;
   cacheTransaction(data: unknown): Promise<number | null>;
   getCachedTransactions(): Promise<unknown[]>;
@@ -274,10 +280,18 @@ export class Database implements StorageAdapter {
     const store = db.createObjectStore(modelName, { keyPath: "id" });
     const meta = ModelRegistry.getModelMeta(modelName);
     if (meta != null) {
+      const created = new Set<string>();
       for (const [propName, propMeta] of meta.properties) {
         if (propMeta.indexed === true) {
           store.createIndex(propName, propName, { unique: false });
+          created.add(propName);
         }
+      }
+      // syncGroupField is implicitly indexed — required for efficient eviction
+      if (meta.syncGroupField != null && !created.has(meta.syncGroupField)) {
+        store.createIndex(meta.syncGroupField, meta.syncGroupField, {
+          unique: false,
+        });
       }
     }
   }
@@ -298,6 +312,10 @@ export class Database implements StorageAdapter {
       if (propMeta.indexed === true) {
         wantedIndexes.add(propName);
       }
+    }
+    // syncGroupField is implicitly indexed
+    if (meta.syncGroupField != null) {
+      wantedIndexes.add(meta.syncGroupField);
     }
 
     // Remove indexes that shouldn't exist anymore
@@ -467,6 +485,41 @@ export class Database implements StorageAdapter {
       store.delete(id);
     }
     return this.waitForTransaction(tx);
+  }
+
+  async deleteModelsByIndex(
+    modelName: string,
+    indexName: string,
+    value: string,
+  ): Promise<void> {
+    if (!this.hasStore(modelName)) {
+      return;
+    }
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(modelName, "readwrite");
+      const store = tx.objectStore(modelName);
+      const request = store.indexNames.contains(indexName)
+        ? store.index(indexName).openCursor(IDBKeyRange.only(value))
+        : store.openCursor();
+      request.onsuccess = (event) => {
+        const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+        if (cursor == null) {
+          return;
+        }
+        if (
+          !store.indexNames.contains(indexName) &&
+          cursor.value[indexName] !== value
+        ) {
+          cursor.continue();
+          return;
+        }
+        cursor.delete();
+        cursor.continue();
+      };
+      request.onerror = () => reject(request.error);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
   }
 
   async clearModelStore(modelName: string): Promise<void> {

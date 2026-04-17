@@ -572,7 +572,9 @@ describe("StoreManager", () => {
       a1.hydrate({ id: "a1", taskId: "t1", text: "pooled" });
       addToPool(managerWithFetcher, "TestActivity", a1);
 
-      const results = await managerWithFetcher.loadByIds("TestActivity", ["a1"]);
+      const results = await managerWithFetcher.loadByIds("TestActivity", [
+        "a1",
+      ]);
 
       expect(results).toHaveLength(1);
       expect(results[0]).toBe(a1);
@@ -584,7 +586,9 @@ describe("StoreManager", () => {
         { id: "a1", taskId: "t1", text: "idb-only" },
       ]);
 
-      const results = await managerWithFetcher.loadByIds("TestActivity", ["a1"]);
+      const results = await managerWithFetcher.loadByIds("TestActivity", [
+        "a1",
+      ]);
 
       expect(results).toHaveLength(1);
       expect(results[0].id).toBe("a1");

@@ -77,9 +77,9 @@ describe("Database", () => {
     });
   });
 
-  // ── deleteModel / clearModelStore ─────────────────────────────────────────
+  // ── deleteModel / deleteModels / clearModelStore ──────────────────────────
 
-  describe("deleteModel / clearModelStore", () => {
+  describe("deleteModel / deleteModels / clearModelStore", () => {
     it("deleteModel removes the record", async () => {
       await db.writeModels("TestTask", [{ id: "t1", title: "Deletable" }]);
       await db.deleteModel("TestTask", "t1");
@@ -90,10 +90,80 @@ describe("Database", () => {
       await expect(db.deleteModel("TestTask", "ghost")).resolves.not.toThrow();
     });
 
+    it("deleteModels removes multiple records in one call", async () => {
+      await db.writeModels("TestTask", [
+        { id: "a", title: "A" },
+        { id: "b", title: "B" },
+        { id: "c", title: "C" },
+      ]);
+      await db.deleteModels("TestTask", ["a", "c"]);
+      expect(await db.readModel("TestTask", "a")).toBeNull();
+      expect(await db.readModel("TestTask", "b")).not.toBeNull();
+      expect(await db.readModel("TestTask", "c")).toBeNull();
+    });
+
+    it("deleteModels is safe for an empty id list", async () => {
+      await db.writeModels("TestTask", [{ id: "t1", title: "Keep" }]);
+      await expect(db.deleteModels("TestTask", [])).resolves.not.toThrow();
+      expect(await db.readModel("TestTask", "t1")).not.toBeNull();
+    });
+
     it("clearModelStore removes all records", async () => {
       await db.writeModels("TestTask", [{ id: "a" }, { id: "b" }, { id: "c" }]);
       await db.clearModelStore("TestTask");
       expect(await db.readAllModels("TestTask")).toHaveLength(0);
+    });
+  });
+
+  // ── deleteModelsByIndex ────────────────────────────────────────────────────
+
+  describe("deleteModelsByIndex()", () => {
+    it("deletes records matching the index value (IDB index path)", async () => {
+      // TestLayeredDriver has syncGroupField: "layerId" → real IDB index exists
+      await db.writeModels("TestLayeredDriver", [
+        { id: "d1", layerId: "layer-A", name: "Alpha" },
+        { id: "d2", layerId: "layer-A", name: "Beta" },
+        { id: "d3", layerId: "layer-B", name: "Gamma" },
+      ]);
+
+      await db.deleteModelsByIndex("TestLayeredDriver", "layerId", "layer-A");
+
+      expect(await db.readModel("TestLayeredDriver", "d1")).toBeNull();
+      expect(await db.readModel("TestLayeredDriver", "d2")).toBeNull();
+      expect(await db.readModel("TestLayeredDriver", "d3")).not.toBeNull();
+    });
+
+    it("deletes records matching the value via full-scan fallback (no IDB index)", async () => {
+      // TestTask.title has no IDB index — exercises the cursor full-scan path
+      await db.writeModels("TestTask", [
+        { id: "t1", title: "keep" },
+        { id: "t2", title: "remove" },
+        { id: "t3", title: "remove" },
+      ]);
+
+      await db.deleteModelsByIndex("TestTask", "title", "remove");
+
+      expect(await db.readModel("TestTask", "t1")).not.toBeNull();
+      expect(await db.readModel("TestTask", "t2")).toBeNull();
+      expect(await db.readModel("TestTask", "t3")).toBeNull();
+    });
+
+    it("is safe when no records match", async () => {
+      await db.writeModels("TestLayeredDriver", [
+        { id: "d1", layerId: "layer-A", name: "Alpha" },
+      ]);
+
+      await expect(
+        db.deleteModelsByIndex("TestLayeredDriver", "layerId", "layer-Z"),
+      ).resolves.not.toThrow();
+
+      expect(await db.readModel("TestLayeredDriver", "d1")).not.toBeNull();
+    });
+
+    it("is safe for an unknown store", async () => {
+      await expect(
+        db.deleteModelsByIndex("UnknownModel", "layerId", "x"),
+      ).resolves.not.toThrow();
     });
   });
 

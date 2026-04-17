@@ -134,6 +134,7 @@ class ModelRegistryImpl {
         `version=${meta.schemaVersion}`,
         `loadStrategy=${meta.loadStrategy}`,
         `usedForPartialIndexes=${meta.usedForPartialIndexes}`,
+        `syncGroupField=${meta.syncGroupField ?? ""}`,
         `props=[${props}]`,
       ].join(":");
     });

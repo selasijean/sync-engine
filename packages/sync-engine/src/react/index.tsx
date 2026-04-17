@@ -77,7 +77,9 @@ export function SyncProvider({
     const sm = new StoreManager({
       ...cfgRef.current,
       onPhaseChange: (phase, detail) => {
-        if (active) { setStatus({ phase, detail }); }
+        if (active) {
+          setStatus({ phase, detail });
+        }
       },
     });
     smRef.current = sm;
@@ -283,7 +285,11 @@ export function useLazyIds<T = any>(
   const idsKey = ids?.join(",") ?? "";
 
   const doLoad = useCallback(async () => {
-    if (ids == null || ids.length === 0 || status.phase !== BootstrapPhase.Ready) {
+    if (
+      ids == null ||
+      ids.length === 0 ||
+      status.phase !== BootstrapPhase.Ready
+    ) {
       return;
     }
     const g = ++gen.current;

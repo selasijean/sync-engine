@@ -96,6 +96,13 @@ export interface ModelMeta {
   computedProps: Set<string>;
   ctor: new () => BaseModel;
   schemaVersion: number;
+  /**
+   * The field that scopes this model to a sync group (e.g. "layerId").
+   * Declared via @ClientModel({ syncGroupField: "layerId" }).
+   * The engine automatically indexes this field in IDB and uses it
+   * to evict records during deactivateSyncGroup().
+   */
+  syncGroupField?: string;
 }
 
 /** Tracks what changed on a property: old value and new value. */

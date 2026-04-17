@@ -40,6 +40,12 @@ export function ClientModel(
     loadStrategy?: LoadStrategy;
     usedForPartialIndexes?: boolean;
     schemaVersion?: number;
+    /**
+     * The field that scopes this model to a sync group (e.g. "layerId").
+     * The engine automatically indexes this field in IDB and uses it to
+     * evict records when deactivateSyncGroup() is called.
+     */
+    syncGroupField?: string;
   } = {},
 ) {
   // Legacy decorator target — no better type exists for prototype manipulation
@@ -56,6 +62,9 @@ export function ClientModel(
     }
     if (opts.schemaVersion != null) {
       meta.schemaVersion = opts.schemaVersion;
+    }
+    if (opts.syncGroupField != null) {
+      meta.syncGroupField = opts.syncGroupField;
     }
     return ctor;
   };

@@ -101,6 +101,22 @@ export class MemoryAdapter implements StorageAdapter {
     }
   }
 
+  async deleteModelsByIndex(
+    modelName: string,
+    indexName: string,
+    value: string,
+  ): Promise<void> {
+    const bucket = this.models.get(modelName);
+    if (bucket == null) {
+      return;
+    }
+    for (const [id, record] of bucket.entries()) {
+      if (record[indexName] === value) {
+        bucket.delete(id);
+      }
+    }
+  }
+
   async clearModelStore(modelName: string): Promise<void> {
     this.models.get(modelName)?.clear();
   }
