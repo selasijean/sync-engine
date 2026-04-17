@@ -1,5 +1,6 @@
 # Node (root-level, if any)
 node_modules/
+packages/sync-engine/dist/
 
 # IDE
 .idea/

@@ -3,12 +3,26 @@
   "version": "0.1.0",
   "private": false,
   "description": "A sync engine library for building local-first applications",
-  "main": "./src/core/index.ts",
+  "type": "module",
+  "main": "./dist/core/index.js",
+  "types": "./dist/core/index.d.ts",
   "exports": {
-    ".": "./src/core/index.ts",
-    "./react": "./src/react/index.tsx"
+    ".": {
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js"
+    }
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
