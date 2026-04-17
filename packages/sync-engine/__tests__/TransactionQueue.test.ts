@@ -131,6 +131,36 @@ describe("TransactionQueue", () => {
       expect(cached).toHaveLength(0);
     });
 
+    it("waits for the IDB cache key before sending and clearing a transaction", async () => {
+      let resolveCache!: (key: number | null) => void;
+      const cacheSpy = vi.spyOn(db, "cacheTransaction").mockReturnValue(
+        new Promise((res) => {
+          resolveCache = res;
+        }),
+      );
+      const deleteSpy = vi.spyOn(db, "deleteCachedTransactions");
+      const sender = vi
+        .fn()
+        .mockResolvedValue({ success: true, lastSyncId: 1 });
+      queue.setSender(sender);
+
+      const enqueuePromise = queue.enqueueUpdate("t1", "TestTask", {
+        title: { oldValue: "A", newValue: "B" },
+      });
+      const flushPromise = flush(queue);
+      await Promise.resolve();
+
+      expect(sender).not.toHaveBeenCalled();
+
+      resolveCache(123);
+      await enqueuePromise;
+      await flushPromise;
+
+      expect(cacheSpy).toHaveBeenCalledOnce();
+      expect(sender).toHaveBeenCalledOnce();
+      expect(deleteSpy).toHaveBeenCalledWith([123]);
+    });
+
     it("reverts the model and marks Failed when server rejects", async () => {
       const task = new TestTask();
       task.hydrate({ id: "t1", title: "New" });

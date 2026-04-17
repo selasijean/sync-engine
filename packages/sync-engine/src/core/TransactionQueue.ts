@@ -77,6 +77,7 @@ export class TransactionQueue {
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private flushDelay = 50; // ms — batches rapid saves
   private undoLimit: number;
+  private cacheWrites = new Map<BaseTransaction, Promise<void>>();
 
   constructor(database: StorageAdapter, pool: ObjectPool, undoLimit = 100) {
     this.database = database;
@@ -182,8 +183,15 @@ export class TransactionQueue {
     this.pending.push(tx);
     this.scheduleFlush();
 
-    // Cache in IDB for offline resilience (async — idbKey needed only for resendCached)
-    tx.idbKey = await this.database.cacheTransaction(tx.serialize());
+    // Cache in IDB for offline resilience. Track the write so a manual or very
+    // fast flush cannot receive a server ACK before the tx has an idbKey.
+    const cacheWrite = this.database
+      .cacheTransaction(tx.serialize())
+      .then((idbKey) => {
+        tx.idbKey = idbKey;
+      });
+    this.cacheWrites.set(tx, cacheWrite);
+    await cacheWrite;
   }
 
   // ── Flush — send batch to server ──────────────────────────────────────────
@@ -207,6 +215,9 @@ export class TransactionQueue {
     this.executing.push(...batch);
 
     try {
+      await Promise.all(batch.map((tx) => this.cacheWrites.get(tx)));
+      batch.forEach((tx) => this.cacheWrites.delete(tx));
+
       const response = await this.sender(batch.map((tx) => tx.serialize()));
       this.executing = this.executing.filter((tx) => !batch.includes(tx));
 
