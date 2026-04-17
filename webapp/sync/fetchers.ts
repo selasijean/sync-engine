@@ -1,17 +1,17 @@
-import type { BootstrapResponse } from "sync-engine";
+import type { BootstrapFetcherOptions, BootstrapResponse } from "sync-engine";
 import { API_URL, WORKSPACE_ID } from "./config";
 
 export async function bootstrapFetcher(
   type: "full" | "partial",
-  sinceSyncId?: number,
-  onlyModels?: string[],
+  options?: BootstrapFetcherOptions,
 ): Promise<BootstrapResponse> {
+  const { sinceSyncId, onlyModels } = options ?? {};
   const params = new URLSearchParams({ type });
   if (sinceSyncId !== undefined) {
     params.set("since", String(sinceSyncId));
   }
   if ((onlyModels?.length ?? 0) > 0) {
-    params.set("onlyModels", onlyModels?.join(",") ?? "");
+    params.set("onlyModels", onlyModels.join(","));
   }
   params.set("syncGroups", WORKSPACE_ID);
 

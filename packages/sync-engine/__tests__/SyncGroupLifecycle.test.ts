@@ -125,7 +125,10 @@ describe("activateSyncGroup()", () => {
 
     await manager.activateSyncGroup("layer-A");
 
-    expect(syncGroupFetcher).toHaveBeenCalledWith(["layer-A"]);
+    expect(syncGroupFetcher).toHaveBeenCalledWith(
+      ["layer-A"],
+      expect.objectContaining({ currentMeta: expect.anything() }),
+    );
   });
 
   it("writes fetched records to IDB", async () => {

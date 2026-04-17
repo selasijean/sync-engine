@@ -21,7 +21,12 @@
 
 import { ModelRegistry } from "./ModelRegistry";
 import { ObjectPool } from "./ObjectPool";
-import { Database, BootstrapType, type StorageAdapter } from "./Database";
+import {
+  Database,
+  BootstrapType,
+  type StorageAdapter,
+  type DatabaseMeta,
+} from "./Database";
 import { FullStore, PartialStore, type ModelStore } from "./Store";
 import { TransactionQueue, type TransactionSender } from "./TransactionQueue";
 import {
@@ -71,17 +76,21 @@ export interface BootstrapResponse {
   backendDatabaseVersion?: number;
 }
 
-/**
- * Fetches bootstrap data from the server.
- * @param type "full" for everything, "partial" for delta since sinceSyncId
- * @param sinceSyncId for partial: the lastSyncId to fetch changes since
- * @param onlyModels optional: restrict to these model types (for two-phase bootstrap)
- */
+export interface FetcherContext {
+  currentMeta?: DatabaseMeta | null;
+}
+
+export interface BootstrapFetcherOptions extends FetcherContext {
+  sinceSyncId?: number;
+  onlyModels?: string[];
+}
+
 export type BootstrapFetcher = (
   type: BootstrapType.Full | BootstrapType.Partial,
-  sinceSyncId?: number,
-  onlyModels?: string[],
+  options?: BootstrapFetcherOptions,
 ) => Promise<BootstrapResponse>;
+
+export type SyncGroupFetcherOptions = FetcherContext;
 
 /**
  * Fetches models scoped to specific sync groups.
@@ -90,6 +99,7 @@ export type BootstrapFetcher = (
  */
 export type SyncGroupFetcher = (
   addedGroups: string[],
+  options?: SyncGroupFetcherOptions,
 ) => Promise<Record<string, Record<string, unknown>[]>>;
 
 export interface StoreManagerConfig {
@@ -308,11 +318,10 @@ export class StoreManager {
         BootstrapPhase.Fetching,
         `phase 1: ${criticalModels.length} critical models`,
       );
-      const res = await this.config.bootstrapFetcher(
-        BootstrapType.Full,
-        undefined,
-        criticalModels,
-      );
+      const res = await this.config.bootstrapFetcher(BootstrapType.Full, {
+        onlyModels: criticalModels,
+        currentMeta: this.database.currentMeta,
+      });
 
       this.setPhase(BootstrapPhase.WritingToDatabase);
       await Promise.all(
@@ -343,7 +352,9 @@ export class StoreManager {
     } else {
       // Single-phase: fetch everything at once
       this.setPhase(BootstrapPhase.Fetching, "full");
-      const res = await this.config.bootstrapFetcher(BootstrapType.Full);
+      const res = await this.config.bootstrapFetcher(BootstrapType.Full, {
+        currentMeta: this.database.currentMeta,
+      });
 
       this.setPhase(BootstrapPhase.WritingToDatabase);
       await Promise.all(
@@ -375,11 +386,10 @@ export class StoreManager {
    */
   private async fetchDeferredModels(modelNames: string[], sinceSyncId: number) {
     try {
-      const res = await this.config.bootstrapFetcher(
-        BootstrapType.Partial,
+      const res = await this.config.bootstrapFetcher(BootstrapType.Partial, {
         sinceSyncId,
-        modelNames,
-      );
+        onlyModels: modelNames,
+      });
       await Promise.all(
         Object.entries(res.models).map(([name, records]) => {
           const store = this.stores.get(name);
@@ -419,10 +429,10 @@ export class StoreManager {
       BootstrapPhase.Fetching,
       `since syncId ${existing.lastSyncId}`,
     );
-    const res = await this.config.bootstrapFetcher(
-      BootstrapType.Partial,
-      existing.lastSyncId,
-    );
+    const res = await this.config.bootstrapFetcher(BootstrapType.Partial, {
+      sinceSyncId: existing.lastSyncId,
+      currentMeta: existing,
+    });
 
     // Check backendDatabaseVersion. If the server's schema changed since our
     // last bootstrap, the delta data might be structured differently (renamed
@@ -698,7 +708,9 @@ export class StoreManager {
       return;
     }
 
-    const models = await this.config.syncGroupFetcher(addedGroups);
+    const models = await this.config.syncGroupFetcher(addedGroups, {
+      currentMeta: this.database.currentMeta,
+    });
 
     await Promise.all(
       Object.entries(models).map(async ([modelName, records]) => {
@@ -761,7 +773,9 @@ export class StoreManager {
       return;
     }
 
-    const models = await this.config.syncGroupFetcher([groupId]);
+    const models = await this.config.syncGroupFetcher([groupId], {
+      currentMeta: dbMeta,
+    });
 
     await Promise.all(
       Object.entries(models).map(async ([modelName, records]) => {
