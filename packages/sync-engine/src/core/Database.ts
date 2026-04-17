@@ -59,6 +59,10 @@ export interface StorageAdapter {
     modelName: string,
     records: Record<string, unknown>[],
   ): Promise<void>;
+  writeModelsIfAbsent(
+    modelName: string,
+    records: Record<string, unknown>[],
+  ): Promise<void>;
   readAllModels(modelName: string): Promise<Record<string, unknown>[]>;
   readModel(
     modelName: string,
@@ -414,6 +418,34 @@ export class Database implements StorageAdapter {
     const tx = this.db!.transaction(modelName, "readwrite");
     const store = tx.objectStore(modelName);
     for (const record of records) {
+      store.put(record);
+    }
+    return this.waitForTransaction(tx);
+  }
+
+  async writeModelsIfAbsent(
+    modelName: string,
+    records: Record<string, unknown>[],
+  ): Promise<void> {
+    if (!this.hasStore(modelName) || records.length === 0) {
+      return;
+    }
+    // IDB transactions on a single connection are serialized, so no gap between
+    // the read and write can let a concurrent write slip through.
+    const existingKeys = await new Promise<Set<string>>((resolve, reject) => {
+      const r = this.db!.transaction(modelName, "readonly")
+        .objectStore(modelName)
+        .getAllKeys();
+      r.onsuccess = () => resolve(new Set(r.result as string[]));
+      r.onerror = () => reject(r.error);
+    });
+    const newRecords = records.filter((r) => !existingKeys.has(r.id as string));
+    if (newRecords.length === 0) {
+      return;
+    }
+    const tx = this.db!.transaction(modelName, "readwrite");
+    const store = tx.objectStore(modelName);
+    for (const record of newRecords) {
       store.put(record);
     }
     return this.waitForTransaction(tx);

@@ -27,6 +27,7 @@ export { StoreManager, RestrictDeleteError } from "./StoreManager";
 export type {
   BootstrapResponse,
   BootstrapFetcher,
+  BootstrapFetcherOptions,
   SyncGroupFetcher,
   StoreManagerConfig,
 } from "./StoreManager";

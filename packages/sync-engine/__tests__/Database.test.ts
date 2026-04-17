@@ -60,6 +60,34 @@ describe("Database", () => {
       expect(records[0].title).toBe("Second");
     });
 
+  });
+
+  describe("writeModelsIfAbsent", () => {
+    it("writes a record when no record with that id exists", async () => {
+      await db.writeModelsIfAbsent("TestTask", [{ id: "t1", title: "New" }]);
+      const record = await db.readModel("TestTask", "t1");
+      expect(record).toMatchObject({ title: "New" });
+    });
+
+    it("does not overwrite an existing record", async () => {
+      await db.writeModels("TestTask", [{ id: "t1", title: "Original" }]);
+      await db.writeModelsIfAbsent("TestTask", [{ id: "t1", title: "Should not apply" }]);
+      const record = await db.readModel("TestTask", "t1");
+      expect(record!.title).toBe("Original");
+    });
+
+    it("writes new records and skips existing ones in the same call", async () => {
+      await db.writeModels("TestTask", [{ id: "existing", title: "Keep me" }]);
+      await db.writeModelsIfAbsent("TestTask", [
+        { id: "existing", title: "Overwrite attempt" },
+        { id: "new", title: "Write me" },
+      ]);
+      expect((await db.readModel("TestTask", "existing"))!.title).toBe("Keep me");
+      expect((await db.readModel("TestTask", "new"))!.title).toBe("Write me");
+    });
+  });
+
+  describe("readModel", () => {
     it("readModel returns the record by id", async () => {
       await db.writeModels("TestTask", [{ id: "t1", title: "Found" }]);
       const record = await db.readModel("TestTask", "t1");

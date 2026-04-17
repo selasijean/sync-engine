@@ -2,8 +2,31 @@ package handler
 
 import (
 	"encoding/json"
+	"net/http"
+	"strconv"
 	"strings"
+
+	"github.com/gin-gonic/gin"
 )
+
+// parseSinceParam reads the "since" query param, parses it as int64, and writes
+// a 400 response on failure. Returns (0, false) when the param is absent and
+// required is false. Returns (0, false) and writes 400 when absent and required.
+func parseSinceParam(c *gin.Context, required bool) (int64, bool) {
+	s := c.Query("since")
+	if s == "" {
+		if required {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "partial requires 'since'"})
+		}
+		return 0, false
+	}
+	v, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid since param"})
+		return 0, false
+	}
+	return v, true
+}
 
 func splitCSV(s string) []string {
 	if s == "" {

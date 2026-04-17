@@ -2,11 +2,11 @@ package handler
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/selasi/sync-server/internal/database"
 	"github.com/selasi/sync-server/internal/types"
+	"golang.org/x/sync/errgroup"
 )
 
 type Bootstrap struct {
@@ -40,17 +40,31 @@ func (h *Bootstrap) Handle(c *gin.Context) {
 	}
 
 	var models map[string][]any
+	var deletedIds map[string][]string
 
 	switch btype {
 	case "full":
-		models, err = h.fullBootstrap(c, syncGroups, onlyModels)
+		// Run model fetch and deleted-ID lookup concurrently — they're independent.
+		// DeletedSince is only called when the client sends `since` (deferred phase 2).
+		g, gctx := errgroup.WithContext(ctx)
+		g.Go(func() error {
+			var ferr error
+			models, ferr = h.fullBootstrap(c, syncGroups, onlyModels)
+			return ferr
+		})
+		if since, ok := parseSinceParam(c, false); ok {
+			g.Go(func() error {
+				var ferr error
+				deletedIds, ferr = h.cl.DeletedSince(gctx, since, onlyModels)
+				return ferr
+			})
+		}
+		err = g.Wait()
 	case "partial":
-		sinceStr := c.Query("since")
-		if sinceStr == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "partial requires 'since'"})
+		since, ok := parseSinceParam(c, true)
+		if !ok {
 			return
 		}
-		since, _ := strconv.ParseInt(sinceStr, 10, 64)
 		models, err = h.partialBootstrap(c, since, syncGroups, onlyModels)
 	}
 
@@ -64,6 +78,7 @@ func (h *Bootstrap) Handle(c *gin.Context) {
 		SubscribedSyncGroups:   syncGroups,
 		Models:                 toRawMap(models),
 		BackendDatabaseVersion: dbVersion,
+		DeletedIds:             deletedIds,
 	})
 }
 

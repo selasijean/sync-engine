@@ -10,6 +10,10 @@ type BootstrapResponse struct {
 	SubscribedSyncGroups   []string                     `json:"subscribedSyncGroups"`
 	Models                 map[string][]json.RawMessage `json:"models"`
 	BackendDatabaseVersion int                          `json:"backendDatabaseVersion"`
+	// DeletedIds lists record IDs deleted since the client's lastSyncId, grouped
+	// by model name. Only present when the client sends a `since` param with a
+	// full bootstrap request (deferred model phase). Omitted otherwise.
+	DeletedIds map[string][]string `json:"deletedIds,omitempty"`
 }
 
 // TransactionRequest is the body of POST /api/transactions.

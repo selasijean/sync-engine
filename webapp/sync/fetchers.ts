@@ -11,7 +11,7 @@ export async function bootstrapFetcher(
     params.set("since", String(sinceSyncId));
   }
   if ((onlyModels?.length ?? 0) > 0) {
-    params.set("onlyModels", onlyModels.join(","));
+    params.set("onlyModels", onlyModels!.join(","));
   }
   params.set("syncGroups", WORKSPACE_ID);
 

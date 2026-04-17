@@ -128,6 +128,34 @@ func (c *Changelog) AllRows(ctx context.Context, modelName string) ([]json.RawMe
 	return marshalSlice(slice)
 }
 
+// DeletedSince returns IDs of records deleted after sinceID, grouped by model name.
+// Used to give clients a precise eviction list so they don't need to clearModelStore.
+func (c *Changelog) DeletedSince(ctx context.Context, sinceID int64, modelNames []string) (map[string][]string, error) {
+	var entries []struct {
+		ModelName string `bun:"model_name"`
+		ModelID   string `bun:"model_id"`
+	}
+	q := c.DB.NewSelect().
+		ColumnExpr("model_name, model_id").
+		TableExpr("changelog").
+		Where("id > ?", sinceID).
+		Where("action = 'D'")
+
+	if len(modelNames) > 0 {
+		q = q.Where("model_name IN (?)", bun.In(modelNames))
+	}
+
+	if err := q.Scan(ctx, &entries); err != nil {
+		return nil, err
+	}
+
+	result := map[string][]string{}
+	for _, e := range entries {
+		result[e.ModelName] = append(result[e.ModelName], e.ModelID)
+	}
+	return result, nil
+}
+
 // ChangedSince finds models modified after sinceID and returns their current state.
 // Groups changed IDs from the changelog, fetches current rows via Bun structs.
 func (c *Changelog) ChangedSince(

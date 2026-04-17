@@ -74,6 +74,13 @@ export interface BootstrapResponse {
   models: Record<string, Record<string, unknown>[]>;
   /** Server-side schema version. Mismatch with stored value → full bootstrap. */
   backendDatabaseVersion?: number;
+  /**
+   * Record IDs deleted since the client's lastSyncId, grouped by model name.
+   * Only present on full bootstrap requests that include a `since` param
+   * (i.e. deferred model phase 2). Lets the client evict deleted records
+   * without needing clearModelStore.
+   */
+  deletedIds?: Record<string, string[]>;
 }
 
 export interface FetcherContext {
@@ -384,21 +391,27 @@ export class StoreManager {
    * Uses Full bootstrap because the client has never fetched these models before.
    * Any changes that occurred concurrently during phase 1 are covered by SSE,
    * which connects before this method runs.
+   *
+   * Bypasses clearModelStore to avoid clobbering concurrent SSE writes to IDB.
+   * Uses writeModelsIfAbsent so snapshot records only land if SSE hasn't already
+   * written a newer version.
    */
   private async fetchDeferredModels(modelNames: string[]) {
     try {
+      const currentMeta = this.database.currentMeta;
       const res = await this.config.bootstrapFetcher(BootstrapType.Full, {
         onlyModels: modelNames,
+        sinceSyncId: currentMeta?.lastSyncId,
       });
       await Promise.all(
-        Object.entries(res.models).map(([name, records]) => {
-          const store = this.stores.get(name);
-          return store != null
-            ? store.loadFromServer(records)
-            : Promise.resolve();
+        Object.entries(res.models).map(async ([name, records]) => {
+          await this.database.writeModelsIfAbsent(name, records);
+          const deletedIds = res.deletedIds?.[name];
+          if (deletedIds != null && deletedIds.length > 0) {
+            await this.database.deleteModels(name, deletedIds);
+          }
         }),
       );
-      // Update lastSyncId if the server advanced during our fetch
       const meta = this.database.currentMeta;
       if (meta != null && res.lastSyncId > meta.lastSyncId) {
         meta.lastSyncId = res.lastSyncId;

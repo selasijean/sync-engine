@@ -66,6 +66,23 @@ export class MemoryAdapter implements StorageAdapter {
     }
   }
 
+  async writeModelsIfAbsent(
+    modelName: string,
+    records: Record<string, unknown>[],
+  ): Promise<void> {
+    let bucket = this.models.get(modelName);
+    if (bucket == null) {
+      bucket = new Map();
+      this.models.set(modelName, bucket);
+    }
+    for (const record of records) {
+      const id = record.id as string;
+      if (!bucket.has(id)) {
+        bucket.set(id, record);
+      }
+    }
+  }
+
   async readAllModels(modelName: string): Promise<Record<string, unknown>[]> {
     return [...(this.models.get(modelName)?.values() ?? [])];
   }
