@@ -108,5 +108,24 @@ describe("ModelRegistry", () => {
       const after = ModelRegistry.schemaHash;
       expect(after).not.toBe(before);
     });
+
+    it("changes when property metadata changes", () => {
+      const modelName = `__SchemaMeta_${Date.now()}`;
+      ModelRegistry.registerModel(modelName, class {});
+      ModelRegistry.registerProperty(modelName, {
+        name: "teamId",
+        type: PropertyType.Property,
+      });
+      const before = ModelRegistry.schemaHash;
+
+      ModelRegistry.updateProperty(modelName, "teamId", {
+        type: PropertyType.Reference,
+        indexed: true,
+        referenceTo: "TestProject",
+        onDelete: "cascade",
+      });
+
+      expect(ModelRegistry.schemaHash).not.toBe(before);
+    });
   });
 });

@@ -97,7 +97,7 @@ class ModelRegistryImpl {
   }
 
   /**
-   * A hash of all model names + versions + property names.
+   * A hash of all model names, versions, load strategies, and property metadata.
    * Used to detect when IndexedDB needs a migration.
    */
   get schemaHash(): string {
@@ -109,10 +109,33 @@ class ModelRegistryImpl {
       a.localeCompare(b),
     );
     const parts = sorted.map(([name, meta]) => {
-      const props = [...meta.properties.keys()].sort().join(",");
-      const partial =
-        meta.loadStrategy === LoadStrategy.Partial ? ":partial" : "";
-      return `${name}:v${meta.schemaVersion}${partial}:[${props}]`;
+      const props = [...meta.properties.values()]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((prop) =>
+          [
+            prop.name,
+            prop.type,
+            `lazy=${prop.lazy === true}`,
+            `nullable=${prop.nullable === true}`,
+            `indexed=${prop.indexed === true}`,
+            `serializer=${prop.serializer != null}`,
+            `deserializer=${prop.deserializer != null}`,
+            `referenceTo=${prop.referenceTo ?? ""}`,
+            `inverseOf=${prop.inverseOf ?? ""}`,
+            `idField=${prop.idField ?? ""}`,
+            `idsField=${prop.idsField ?? ""}`,
+            `onDelete=${prop.onDelete ?? ""}`,
+          ].join(";"),
+        )
+        .join(",");
+
+      return [
+        name,
+        `version=${meta.schemaVersion}`,
+        `loadStrategy=${meta.loadStrategy}`,
+        `usedForPartialIndexes=${meta.usedForPartialIndexes}`,
+        `props=[${props}]`,
+      ].join(":");
     });
 
     // Simple string hash
