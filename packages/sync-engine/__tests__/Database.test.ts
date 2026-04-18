@@ -59,7 +59,6 @@ describe("Database", () => {
       expect(records).toHaveLength(1);
       expect(records[0].title).toBe("Second");
     });
-
   });
 
   describe("writeModelsIfAbsent", () => {
@@ -71,7 +70,9 @@ describe("Database", () => {
 
     it("does not overwrite an existing record", async () => {
       await db.writeModels("TestTask", [{ id: "t1", title: "Original" }]);
-      await db.writeModelsIfAbsent("TestTask", [{ id: "t1", title: "Should not apply" }]);
+      await db.writeModelsIfAbsent("TestTask", [
+        { id: "t1", title: "Should not apply" },
+      ]);
       const record = await db.readModel("TestTask", "t1");
       expect(record!.title).toBe("Original");
     });
@@ -82,7 +83,9 @@ describe("Database", () => {
         { id: "existing", title: "Overwrite attempt" },
         { id: "new", title: "Write me" },
       ]);
-      expect((await db.readModel("TestTask", "existing"))!.title).toBe("Keep me");
+      expect((await db.readModel("TestTask", "existing"))!.title).toBe(
+        "Keep me",
+      );
       expect((await db.readModel("TestTask", "new"))!.title).toBe("Write me");
     });
   });
