@@ -55,6 +55,7 @@ describe("ModelStream", () => {
         "http://calc/events",
         adapter,
         pool,
+        undefined,
         makeFactory(client),
       );
 
@@ -74,7 +75,7 @@ describe("ModelStream", () => {
         clients.push(c);
         return c;
       };
-      const stream = new ModelStream("http://calc/events", adapter, pool, factory);
+      const stream = new ModelStream("http://calc/events", adapter, pool, undefined, factory);
 
       stream.connect();
       expect(clients).toHaveLength(1);
@@ -95,6 +96,7 @@ describe("ModelStream", () => {
         "http://calc/events",
         adapter,
         pool,
+        undefined,
         makeFactory(client),
       );
       stream.connect();
@@ -129,6 +131,7 @@ describe("ModelStream", () => {
         "http://calc/events",
         adapter,
         pool,
+        undefined,
         makeFactory(client),
       );
       stream.connect();
@@ -156,6 +159,7 @@ describe("ModelStream", () => {
         "http://calc/events",
         adapter,
         pool,
+        undefined,
         makeFactory(client),
       );
       stream.connect();
@@ -178,6 +182,7 @@ describe("ModelStream", () => {
         "http://calc/events",
         adapter,
         pool,
+        undefined,
         makeFactory(client),
       );
       stream.connect();
@@ -200,6 +205,7 @@ describe("ModelStream", () => {
         "http://calc/events",
         adapter,
         pool,
+        undefined,
         makeFactory(client),
       );
       stream.connect();
@@ -217,6 +223,7 @@ describe("ModelStream", () => {
         "http://calc/events",
         adapter,
         pool,
+        undefined,
         makeFactory(client),
       );
       stream.connect();
@@ -251,6 +258,7 @@ describe("ModelStream", () => {
         "http://calc/events",
         adapter,
         pool,
+        undefined,
         makeFactory(client),
       );
       stream.connect();
@@ -272,6 +280,57 @@ describe("ModelStream", () => {
     });
   });
 
+  describe("onStatusChange", () => {
+    it("fires true on connect, false on disconnect", () => {
+      const client = controllableSSEClient();
+      const statusChanges: boolean[] = [];
+      const stream = new ModelStream(
+        "http://calc/events",
+        adapter,
+        pool,
+        (connected) => statusChanges.push(connected),
+        makeFactory(client),
+      );
+
+      stream.connect();
+      expect(statusChanges).toEqual([true]);
+
+      stream.disconnect();
+      expect(statusChanges).toEqual([true, false]);
+    });
+
+    it("fires false on error, true on reconnect", () => {
+      vi.useFakeTimers();
+
+      const clients: SSEClient[] = [];
+      const statusChanges: boolean[] = [];
+      const factory: SSEClientFactory = () => {
+        const c = controllableSSEClient();
+        clients.push(c);
+        return c;
+      };
+      const stream = new ModelStream(
+        "http://calc/events",
+        adapter,
+        pool,
+        (connected) => statusChanges.push(connected),
+        factory,
+      );
+
+      stream.connect();
+      expect(statusChanges).toEqual([true]);
+
+      (clients[0] as ReturnType<typeof controllableSSEClient>).triggerError();
+      expect(statusChanges).toEqual([true, false]);
+
+      vi.advanceTimersByTime(3000);
+      expect(statusChanges).toEqual([true, false, true]);
+
+      stream.disconnect();
+      vi.useRealTimers();
+    });
+  });
+
   describe("reconnect on error", () => {
     it("schedules reconnect when SSE errors", () => {
       vi.useFakeTimers();
@@ -282,7 +341,7 @@ describe("ModelStream", () => {
         clients.push(c);
         return c;
       };
-      const stream = new ModelStream("http://calc/events", adapter, pool, factory);
+      const stream = new ModelStream("http://calc/events", adapter, pool, undefined, factory);
 
       stream.connect();
       expect(clients).toHaveLength(1);
@@ -309,7 +368,7 @@ describe("ModelStream", () => {
         clients.push(c);
         return c;
       };
-      const stream = new ModelStream("http://calc/events", adapter, pool, factory);
+      const stream = new ModelStream("http://calc/events", adapter, pool, undefined, factory);
 
       stream.connect();
       (clients[0] as ReturnType<typeof controllableSSEClient>).triggerError();

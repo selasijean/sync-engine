@@ -234,7 +234,7 @@ describe("Custom sseClientFactory", () => {
 
 // ── Model streams — StoreManager wiring ──────────────────────────────────────
 
-describe("modelStreamUrls wiring", () => {
+describe("modelStreams wiring", () => {
   it("bootstrap connects model streams using sseClientFactory", async () => {
     const { factory, calls } = recordingSSEFactory();
 
@@ -245,9 +245,9 @@ describe("modelStreamUrls wiring", () => {
         subscribedSyncGroups: [],
         models: {},
       }),
-      modelStreamUrls: [
-        "http://calc-service/events",
-        "http://analytics/events",
+      modelStreams: [
+        { url: "http://calc-service/events" },
+        { url: "http://analytics/events" },
       ],
       sseClientFactory: factory,
     });
@@ -261,7 +261,7 @@ describe("modelStreamUrls wiring", () => {
     await agent.teardown();
   });
 
-  it("bootstrap connects both syncUrl and modelStreamUrls", async () => {
+  it("bootstrap connects both syncUrl and modelStreams", async () => {
     const { factory, calls } = recordingSSEFactory();
 
     const agent = new StoreManager({
@@ -272,7 +272,7 @@ describe("modelStreamUrls wiring", () => {
         models: {},
       }),
       syncUrl: "http://primary/events",
-      modelStreamUrls: ["http://calc-service/events"],
+      modelStreams: [{ url: "http://calc-service/events" }],
       sseClientFactory: factory,
     });
 
@@ -300,7 +300,7 @@ describe("modelStreamUrls wiring", () => {
         subscribedSyncGroups: [],
         models: {},
       }),
-      modelStreamUrls: ["http://calc/events", "http://analytics/events"],
+      modelStreams: [{ url: "http://calc/events" }, { url: "http://analytics/events" }],
       sseClientFactory: factory,
     });
 
@@ -329,7 +329,7 @@ describe("modelStreamUrls wiring", () => {
         subscribedSyncGroups: [],
         models: {},
       }),
-      modelStreamUrls: ["http://calc/events"],
+      modelStreams: [{ url: "http://calc/events" }],
       sseClientFactory: factory,
       storageAdapter: new MemoryAdapter(),
     });

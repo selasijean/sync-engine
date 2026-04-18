@@ -110,6 +110,11 @@ export type SyncGroupFetcher = (
   options?: SyncGroupFetcherOptions,
 ) => Promise<Record<string, Record<string, unknown>[]>>;
 
+export interface ModelStreamConfig {
+  url: string;
+  onStatusChange?: (connected: boolean) => void;
+}
+
 export interface StoreManagerConfig {
   workspaceId: string;
   bootstrapFetcher: BootstrapFetcher;
@@ -117,8 +122,8 @@ export interface StoreManagerConfig {
   syncGroupFetcher?: SyncGroupFetcher;
   syncUrl?: string;
 
-  /** URLs for secondary model update streams (e.g. a calculation service). */
-  modelStreamUrls?: string[];
+  /** Secondary model update streams (e.g. a calculation service). */
+  modelStreams?: ModelStreamConfig[];
 
   /**
    * Custom SSE client factory. Defaults to the browser's built-in EventSource.
@@ -299,11 +304,12 @@ export class StoreManager {
         );
         this.syncConnection.connect();
       }
-      for (const url of this.config.modelStreamUrls ?? []) {
+      for (const streamConfig of this.config.modelStreams ?? []) {
         const stream = new ModelStream(
-          url,
+          streamConfig.url,
           this.database,
           this.objectPool,
+          streamConfig.onStatusChange,
           this.config.sseClientFactory,
         );
         stream.connect();

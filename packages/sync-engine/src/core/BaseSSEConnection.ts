@@ -28,8 +28,11 @@ export abstract class BaseSSEConnection {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
-    this.eventSource?.close();
-    this.eventSource = null;
+    if (this.eventSource != null) {
+      this.eventSource.close();
+      this.eventSource = null;
+      this.onClose();
+    }
   }
 
   reconnect() {
@@ -47,9 +50,15 @@ export abstract class BaseSSEConnection {
   protected abstract onMessage(data: string): void;
 
   protected onReconnect(): void {}
+  protected onOpen(): void {}
+  protected onClose(): void {}
 
   private openEventSource() {
-    this.eventSource?.close();
+    if (this.eventSource != null) {
+      this.eventSource.close();
+      this.eventSource = null;
+      this.onClose();
+    }
 
     const url = this.buildUrl();
 
@@ -67,8 +76,11 @@ export abstract class BaseSSEConnection {
       this.eventSource.onerror = () => {
         this.eventSource?.close();
         this.eventSource = null;
+        this.onClose();
         this.scheduleReconnect();
       };
+
+      this.onOpen();
     } catch {
       // construction failed
     }

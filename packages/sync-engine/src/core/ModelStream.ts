@@ -24,6 +24,7 @@ export class ModelStream extends BaseSSEConnection {
     url: string,
     private database: StorageAdapter,
     private pool: ObjectPool,
+    private onStatusChange?: (connected: boolean) => void,
     sseClientFactory?: SSEClientFactory,
   ) {
     super(url, sseClientFactory);
@@ -33,6 +34,14 @@ export class ModelStream extends BaseSSEConnection {
     super.disconnect();
     this.updateQueue = [];
     this.processing = false;
+  }
+
+  protected onOpen() {
+    this.onStatusChange?.(true);
+  }
+
+  protected onClose() {
+    this.onStatusChange?.(false);
   }
 
   protected onMessage(data: string): void {
