@@ -250,6 +250,109 @@ describe("activateSyncGroup()", () => {
   });
 });
 
+// ── activateSyncGroup() — array input ────────────────────────────────────────
+
+describe("activateSyncGroup() with array input", () => {
+  it("activates multiple groups in one call", async () => {
+    const syncGroupFetcher = vi.fn().mockResolvedValue({});
+    manager = await makeManager({ syncGroupFetcher });
+
+    await manager.activateSyncGroup(["layer-A", "layer-B"]);
+
+    expect(manager.database.currentMeta?.subscribedSyncGroups).toContain(
+      "layer-A",
+    );
+    expect(manager.database.currentMeta?.subscribedSyncGroups).toContain(
+      "layer-B",
+    );
+  });
+
+  it("calls syncGroupFetcher once with all new group IDs", async () => {
+    const syncGroupFetcher = vi.fn().mockResolvedValue({});
+    manager = await makeManager({ syncGroupFetcher });
+
+    await manager.activateSyncGroup(["layer-A", "layer-B"]);
+
+    expect(syncGroupFetcher).toHaveBeenCalledOnce();
+    expect(syncGroupFetcher).toHaveBeenCalledWith(
+      ["layer-A", "layer-B"],
+      expect.anything(),
+    );
+  });
+
+  it("skips already-subscribed IDs and only fetches new ones", async () => {
+    const syncGroupFetcher = vi.fn().mockResolvedValue({});
+    manager = await makeManager({
+      syncGroupFetcher,
+      initialGroups: ["layer-A"],
+    });
+
+    await manager.activateSyncGroup(["layer-A", "layer-B"]);
+
+    expect(syncGroupFetcher).toHaveBeenCalledWith(
+      ["layer-B"],
+      expect.anything(),
+    );
+  });
+
+  it("is a no-op if all IDs are already subscribed", async () => {
+    const syncGroupFetcher = vi.fn().mockResolvedValue({});
+    manager = await makeManager({
+      syncGroupFetcher,
+      initialGroups: ["layer-A", "layer-B"],
+    });
+
+    await manager.activateSyncGroup(["layer-A", "layer-B"]);
+
+    expect(syncGroupFetcher).not.toHaveBeenCalled();
+  });
+});
+
+// ── activateSyncGroup() — fetch: false ────────────────────────────────────────
+
+describe("activateSyncGroup() with fetch: false", () => {
+  it("subscribes without calling syncGroupFetcher", async () => {
+    const syncGroupFetcher = vi.fn().mockResolvedValue({});
+    manager = await makeManager({ syncGroupFetcher });
+
+    await manager.activateSyncGroup("layer-A", { fetch: false });
+
+    expect(syncGroupFetcher).not.toHaveBeenCalled();
+    expect(manager.database.currentMeta?.subscribedSyncGroups).toContain(
+      "layer-A",
+    );
+  });
+
+  it("does not require syncGroupFetcher to be configured", async () => {
+    manager = await makeManager(); // no syncGroupFetcher
+
+    await expect(
+      manager.activateSyncGroup("layer-A", { fetch: false }),
+    ).resolves.not.toThrow();
+  });
+
+  it("still reconnects SSE after subscribing", async () => {
+    const { factory, urls } = recordingSSEFactory();
+    manager = new StoreManager({
+      workspaceId: crypto.randomUUID(),
+      bootstrapFetcher: vi.fn().mockResolvedValue({
+        lastSyncId: 0,
+        subscribedSyncGroups: [],
+        models: {},
+      }),
+      syncUrl: "http://test/events",
+      sseClientFactory: factory,
+    });
+    await manager.bootstrap();
+
+    const urlsBefore = urls.length;
+    await manager.activateSyncGroup("layer-A", { fetch: false });
+
+    expect(urls.length).toBeGreaterThan(urlsBefore);
+    expect(urls[urls.length - 1]).toContain("layer-A");
+  });
+});
+
 // ── deactivateSyncGroup() ─────────────────────────────────────────────────────
 
 describe("deactivateSyncGroup()", () => {
@@ -372,6 +475,63 @@ describe("deactivateSyncGroup()", () => {
 
     expect(urls.length).toBeGreaterThan(urlsBefore);
     expect(urls[urls.length - 1]).not.toContain("layer-A");
+  });
+});
+
+// ── deactivateSyncGroup() — array input ──────────────────────────────────────
+
+describe("deactivateSyncGroup() with array input", () => {
+  it("deactivates multiple groups in one call", async () => {
+    manager = await makeManager({ initialGroups: ["layer-A", "layer-B"] });
+    await seedLayer(manager, "layer-A", ["d-a"]);
+    await seedLayer(manager, "layer-B", ["d-b"]);
+
+    await manager.deactivateSyncGroup(["layer-A", "layer-B"]);
+
+    expect(
+      manager.objectPool.getById("TestLayeredDriver", "d-a"),
+    ).toBeUndefined();
+    expect(
+      manager.objectPool.getById("TestLayeredDriver", "d-b"),
+    ).toBeUndefined();
+    expect(manager.database.currentMeta?.subscribedSyncGroups).toHaveLength(0);
+  });
+
+  it("only evicts models for the specified groups", async () => {
+    manager = await makeManager({
+      initialGroups: ["layer-A", "layer-B", "layer-C"],
+    });
+    await seedLayer(manager, "layer-A", ["d-a"]);
+    await seedLayer(manager, "layer-B", ["d-b"]);
+    await seedLayer(manager, "layer-C", ["d-c"]);
+
+    await manager.deactivateSyncGroup(["layer-A", "layer-B"]);
+
+    expect(
+      manager.objectPool.getById("TestLayeredDriver", "d-a"),
+    ).toBeUndefined();
+    expect(
+      manager.objectPool.getById("TestLayeredDriver", "d-b"),
+    ).toBeUndefined();
+    expect(
+      manager.objectPool.getById("TestLayeredDriver", "d-c"),
+    ).toBeDefined();
+    expect(manager.database.currentMeta?.subscribedSyncGroups).toEqual([
+      "layer-C",
+    ]);
+  });
+
+  it("skips IDs that are not currently subscribed", async () => {
+    manager = await makeManager({ initialGroups: ["layer-A"] });
+    await seedLayer(manager, "layer-A", ["d-a"]);
+
+    await expect(
+      manager.deactivateSyncGroup(["layer-A", "layer-X"]),
+    ).resolves.not.toThrow();
+
+    expect(
+      manager.objectPool.getById("TestLayeredDriver", "d-a"),
+    ).toBeUndefined();
   });
 });
 

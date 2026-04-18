@@ -763,42 +763,54 @@ export class StoreManager {
   // ── Sync group lifecycle (user-initiated) ────────────────────────────────
 
   /**
-   * Activate a sync group: fetch all its models from the server, write to IDB,
-   * hydrate instant-load models into the pool, and reconnect SSE so the server
-   * starts streaming deltas for this group.
+   * Activate a sync group: subscribe to SSE deltas for the group and
+   * optionally fetch its models from the server.
+   *
+   * By default (fetch: true) models are fetched, written to IDB, and hydrated
+   * into the pool before reconnecting. Pass `{ fetch: false }` to subscribe
+   * without fetching — useful when you want SSE deltas to start flowing but
+   * will load models lazily later.
    *
    * Idempotent — does nothing if the group is already active.
    *
-   * Requires syncGroupFetcher to be configured.
+   * Requires syncGroupFetcher to be configured when fetch is true (default).
    */
-  async activateSyncGroup(groupId: string): Promise<void> {
-    if (this.config.syncGroupFetcher == null) {
-      throw new Error(
-        "activateSyncGroup requires syncGroupFetcher to be configured",
-      );
-    }
-
+  async activateSyncGroup(
+    groupId: string | string[],
+    { fetch = true }: { fetch?: boolean } = {},
+  ): Promise<void> {
     const dbMeta = this.database.currentMeta;
     if (dbMeta == null) {
       return;
     }
-    if (dbMeta.subscribedSyncGroups.includes(groupId)) {
+
+    const ids = Array.isArray(groupId) ? groupId : [groupId];
+    const newIds = ids.filter(
+      (id) => !dbMeta.subscribedSyncGroups.includes(id),
+    );
+    if (newIds.length === 0) {
       return;
     }
 
-    const models = await this.config.syncGroupFetcher([groupId], {
-      currentMeta: dbMeta,
-    });
-
-    await Promise.all(
-      Object.entries(models).map(async ([modelName, records]) => {
-        await this.database.writeModels(modelName, records);
-        this.hydrateInstantModels(modelName, records);
-      }),
-    );
+    if (fetch) {
+      if (this.config.syncGroupFetcher == null) {
+        throw new Error(
+          "activateSyncGroup requires syncGroupFetcher to be configured when fetch is true",
+        );
+      }
+      const models = await this.config.syncGroupFetcher(newIds, {
+        currentMeta: dbMeta,
+      });
+      await Promise.all(
+        Object.entries(models).map(async ([modelName, records]) => {
+          await this.database.writeModels(modelName, records);
+          this.hydrateInstantModels(modelName, records);
+        }),
+      );
+    }
 
     const groups = new Set(dbMeta.subscribedSyncGroups);
-    groups.add(groupId);
+    newIds.forEach((id) => groups.add(id));
     dbMeta.subscribedSyncGroups = [...groups];
     await this.database.saveMeta(dbMeta);
     this.syncConnection?.reconnect();
@@ -813,12 +825,17 @@ export class StoreManager {
    *
    * Idempotent — does nothing if the group is not currently active.
    */
-  async deactivateSyncGroup(groupId: string): Promise<void> {
+  async deactivateSyncGroup(groupId: string | string[]): Promise<void> {
     const dbMeta = this.database.currentMeta;
     if (dbMeta == null) {
       return;
     }
-    if (!dbMeta.subscribedSyncGroups.includes(groupId)) {
+
+    const ids = Array.isArray(groupId) ? groupId : [groupId];
+    const groupsToEvict = new Set(
+      ids.filter((id) => dbMeta.subscribedSyncGroups.includes(id)),
+    );
+    if (groupsToEvict.size === 0) {
       return;
     }
 
@@ -830,31 +847,35 @@ export class StoreManager {
       }
       const toEvict = this.objectPool
         .getAll(modelMeta.name)
-        .filter((m) => prop(m, field) === groupId);
+        .filter((m) => groupsToEvict.has(prop(m, field) as string));
       for (const m of toEvict) {
         this.objectPool.remove(modelMeta.name, m.id);
         this.loadedIds.delete(`${modelMeta.name}:${m.id}`);
       }
-      this.loadedCollections.delete(
-        StoreManager.collectionKey(modelMeta.name, field, groupId),
-      );
+      for (const id of groupsToEvict) {
+        this.loadedCollections.delete(
+          StoreManager.collectionKey(modelMeta.name, field, id),
+        );
+      }
     }
 
-    // IDB eviction — parallel across models, cursor-based (no read-then-delete).
+    // IDB eviction — parallel across models and group IDs.
     await Promise.all(
       ModelRegistry.allModels()
         .filter((modelMeta) => modelMeta.syncGroupField != null)
-        .map((modelMeta) =>
-          this.database.deleteModelsByIndex(
-            modelMeta.name,
-            modelMeta.syncGroupField!,
-            groupId,
+        .flatMap((modelMeta) =>
+          [...groupsToEvict].map((id) =>
+            this.database.deleteModelsByIndex(
+              modelMeta.name,
+              modelMeta.syncGroupField!,
+              id,
+            ),
           ),
         ),
     );
 
     dbMeta.subscribedSyncGroups = dbMeta.subscribedSyncGroups.filter(
-      (g) => g !== groupId,
+      (g) => !groupsToEvict.has(g),
     );
     await this.database.saveMeta(dbMeta);
     this.syncConnection?.reconnect();
