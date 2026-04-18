@@ -104,6 +104,43 @@ describe("TransactionQueue", () => {
 
       expect(listener).not.toHaveBeenCalled();
     });
+
+    it("notifies subscribers after undo()", async () => {
+      const task = new TestTask();
+      task.hydrate({ id: "t1", title: "A" });
+      task.makeModelObservable();
+      pool.put("TestTask", task);
+
+      task.title = "B";
+      await queue.enqueueUpdate("t1", "TestTask", {
+        title: { oldValue: "A", newValue: "B" },
+      });
+
+      const listener = vi.fn();
+      queue.subscribe(listener);
+      await queue.undo();
+
+      expect(listener).toHaveBeenCalled();
+    });
+
+    it("notifies subscribers after redo()", async () => {
+      const task = new TestTask();
+      task.hydrate({ id: "t1", title: "A" });
+      task.makeModelObservable();
+      pool.put("TestTask", task);
+
+      task.title = "B";
+      await queue.enqueueUpdate("t1", "TestTask", {
+        title: { oldValue: "A", newValue: "B" },
+      });
+      await queue.undo();
+
+      const listener = vi.fn();
+      queue.subscribe(listener);
+      await queue.redo();
+
+      expect(listener).toHaveBeenCalled();
+    });
   });
 
   // ── flush / sender ─────────────────────────────────────────────────────────

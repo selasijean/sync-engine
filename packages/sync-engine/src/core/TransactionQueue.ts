@@ -483,6 +483,7 @@ export class TransactionQueue {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
     }
+    this.listeners.clear();
   }
 
   // ── Introspection ─────────────────────────────────────────────────────────
