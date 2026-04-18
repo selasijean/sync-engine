@@ -152,6 +152,10 @@ export class SyncConnection extends BaseSSEConnection {
 
     // Step 4: apply to IndexedDB (server is SSOT — IDB mirrors it)
     for (const action of packet.syncActions) {
+      const actionMeta = ModelRegistry.getModelMeta(action.modelName);
+      if (actionMeta?.loadStrategy === LoadStrategy.Ephemeral) {
+        continue;
+      }
       if (["I", "U", "V", "C"].includes(action.action) && action.data != null) {
         await this.database.writeModels(action.modelName, [
           { id: action.modelId, ...action.data },
@@ -324,10 +328,12 @@ export class SyncConnection extends BaseSSEConnection {
           for (const m of toDelete) {
             this.pool.remove(meta.name, m.id);
           }
-          this.database.deleteModels(
-            meta.name,
-            toDelete.map((m) => m.id),
-          ); // fire and forget
+          if (meta.loadStrategy !== LoadStrategy.Ephemeral) {
+            this.database.deleteModels(
+              meta.name,
+              toDelete.map((m) => m.id),
+            ); // fire and forget
+          }
         }
 
         // Reference with onDelete: "cascade"
@@ -346,10 +352,12 @@ export class SyncConnection extends BaseSSEConnection {
           for (const m of toDelete) {
             this.pool.remove(meta.name, m.id);
           }
-          this.database.deleteModels(
-            meta.name,
-            toDelete.map((m) => m.id),
-          ); // fire and forget
+          if (meta.loadStrategy !== LoadStrategy.Ephemeral) {
+            this.database.deleteModels(
+              meta.name,
+              toDelete.map((m) => m.id),
+            ); // fire and forget
+          }
         }
       }
     }

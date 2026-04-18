@@ -27,7 +27,7 @@ import {
   type StorageAdapter,
   type DatabaseMeta,
 } from "./Database";
-import { FullStore, PartialStore, type ModelStore } from "./Store";
+import { FullStore, PartialStore, EphemeralStore, type ModelStore } from "./Store";
 import { TransactionQueue, type TransactionSender } from "./TransactionQueue";
 import {
   SyncConnection,
@@ -255,15 +255,18 @@ export class StoreManager {
     try {
       this.setPhase(BootstrapPhase.CreatingStores);
       for (const meta of ModelRegistry.allModels()) {
-        const isPartial =
+        let store: ModelStore;
+        if (meta.loadStrategy === LoadStrategy.Ephemeral) {
+          store = new EphemeralStore(meta, this.database, this.objectPool);
+        } else if (
           meta.loadStrategy === LoadStrategy.Partial ||
-          meta.loadStrategy === LoadStrategy.ExplicitlyRequested;
-        this.stores.set(
-          meta.name,
-          isPartial
-            ? new PartialStore(meta, this.database, this.objectPool)
-            : new FullStore(meta, this.database, this.objectPool),
-        );
+          meta.loadStrategy === LoadStrategy.ExplicitlyRequested
+        ) {
+          store = new PartialStore(meta, this.database, this.objectPool);
+        } else {
+          store = new FullStore(meta, this.database, this.objectPool);
+        }
+        this.stores.set(meta.name, store);
       }
 
       this.setPhase(BootstrapPhase.ConnectingDatabase);

@@ -4,7 +4,7 @@ import { ObjectPool } from "@sync-engine/ObjectPool";
 import { MemoryAdapter } from "@sync-engine/MemoryAdapter";
 import { BaseModel } from "@sync-engine/BaseModel";
 import type { SSEClient, SSEClientFactory } from "@sync-engine/SyncConnection";
-import { TestTask } from "./fixtures";
+import { TestTask, TestMetric } from "./fixtures";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -205,6 +205,68 @@ describe("ModelStream", () => {
       stream.connect();
 
       client.onmessage?.({ data: "not json" } as MessageEvent);
+
+      stream.disconnect();
+    });
+  });
+
+  describe("ephemeral models", () => {
+    it("hydrates into pool but skips IDB write", async () => {
+      const client = controllableSSEClient();
+      const stream = new ModelStream(
+        "http://calc/events",
+        adapter,
+        pool,
+        makeFactory(client),
+      );
+      stream.connect();
+
+      sendMessage(client, {
+        modelName: "TestMetric",
+        modelId: "m1",
+        data: { value: 42, label: "cpu" },
+      });
+
+      await vi.waitFor(() => {
+        const metric = pool.getById("TestMetric", "m1") as TestMetric | undefined;
+        expect(metric).toBeDefined();
+        expect(metric!.value).toBe(42);
+        expect(metric!.label).toBe("cpu");
+      });
+
+      const stored = await adapter.readModel("TestMetric", "m1");
+      expect(stored).toBeNull();
+
+      stream.disconnect();
+    });
+
+    it("updates existing ephemeral model without IDB write", async () => {
+      const metric = new TestMetric();
+      metric.hydrate({ id: "m1", value: 10, label: "mem" });
+      metric.makeModelObservable();
+      pool.put("TestMetric", metric);
+
+      const client = controllableSSEClient();
+      const stream = new ModelStream(
+        "http://calc/events",
+        adapter,
+        pool,
+        makeFactory(client),
+      );
+      stream.connect();
+
+      sendMessage(client, {
+        modelName: "TestMetric",
+        modelId: "m1",
+        data: { value: 99 },
+      });
+
+      await vi.waitFor(() => {
+        expect((pool.getById("TestMetric", "m1") as TestMetric).value).toBe(99);
+      });
+
+      const stored = await adapter.readModel("TestMetric", "m1");
+      expect(stored).toBeNull();
 
       stream.disconnect();
     });

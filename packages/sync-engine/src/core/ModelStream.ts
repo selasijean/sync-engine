@@ -1,12 +1,14 @@
 /**
  * Lightweight SSE connection for secondary services (e.g. a calculation engine).
- * Only writes to IDB and upserts into the ObjectPool — no sync state management.
+ * Writes to IDB and upserts into the ObjectPool — no sync state management.
+ * Ephemeral models skip IDB and are only held in the pool.
  */
 
 import type { StorageAdapter } from "./Database";
 import { ObjectPool } from "./ObjectPool";
 import { ModelRegistry } from "./ModelRegistry";
 import { BaseSSEConnection, type SSEClientFactory } from "./BaseSSEConnection";
+import { LoadStrategy } from "./types";
 
 interface ModelUpdate {
   modelName: string;
@@ -63,7 +65,9 @@ export class ModelStream extends BaseSSEConnection {
 
     const record = { id: modelId, ...data };
 
-    await this.database.writeModels(modelName, [record]);
+    if (modelMeta.loadStrategy !== LoadStrategy.Ephemeral) {
+      await this.database.writeModels(modelName, [record]);
+    }
 
     const existing = this.pool.getById(modelName, modelId);
     if (existing != null) {

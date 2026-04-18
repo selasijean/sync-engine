@@ -219,6 +219,17 @@ export class TestScopelessItem extends BaseModel {
 
 // ── TestNote (BackReference cascade via SyncConnection) ───────────────────────
 
+// ── TestMetric (ephemeral / pool-only model) ────────────────────────────────
+
+@ClientModel({ loadStrategy: LoadStrategy.Ephemeral })
+export class TestMetric extends BaseModel {
+  @Property()
+  public value = 0;
+
+  @Property()
+  public label = "";
+}
+
 @ClientModel({ loadStrategy: LoadStrategy.Instant })
 export class TestNote extends BaseModel {
   @Property()

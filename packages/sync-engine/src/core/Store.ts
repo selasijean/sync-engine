@@ -56,6 +56,12 @@ export class FullStore extends ModelStore {
   }
 }
 
+/** EphemeralStore — pool-only, no IDB reads or writes. */
+export class EphemeralStore extends ModelStore {
+  async loadFromDatabase() {}
+  async loadFromServer() {}
+}
+
 /** PartialStore — loads a subset of instances on demand. */
 export class PartialStore extends ModelStore {
   private loadedIds = new Set<string>();

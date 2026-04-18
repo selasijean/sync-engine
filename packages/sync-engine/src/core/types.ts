@@ -16,6 +16,8 @@ export enum LoadStrategy {
   ExplicitlyRequested = "explicitlyRequested",
   /** Stored only in local IndexedDB. Used for features still in development. */
   Local = "local",
+  /** Pool-only — never persisted to IDB. Updated only in memory via SSE streams. */
+  Ephemeral = "ephemeral",
 }
 
 /** The kind of data a property holds. Determines how it's stored and observed. */
