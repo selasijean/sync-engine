@@ -232,6 +232,128 @@ describe("Custom sseClientFactory", () => {
   });
 });
 
+// ── Model streams — StoreManager wiring ──────────────────────────────────────
+
+describe("modelStreamUrls wiring", () => {
+  it("bootstrap connects model streams using sseClientFactory", async () => {
+    const { factory, calls } = recordingSSEFactory();
+
+    const agent = new StoreManager({
+      workspaceId: crypto.randomUUID(),
+      bootstrapFetcher: vi.fn().mockResolvedValue({
+        lastSyncId: 0,
+        subscribedSyncGroups: [],
+        models: {},
+      }),
+      modelStreamUrls: [
+        "http://calc-service/events",
+        "http://analytics/events",
+      ],
+      sseClientFactory: factory,
+    });
+
+    await agent.bootstrap();
+
+    expect(calls).toHaveLength(2);
+    expect(calls).toContain("http://calc-service/events");
+    expect(calls).toContain("http://analytics/events");
+
+    await agent.teardown();
+  });
+
+  it("bootstrap connects both syncUrl and modelStreamUrls", async () => {
+    const { factory, calls } = recordingSSEFactory();
+
+    const agent = new StoreManager({
+      workspaceId: crypto.randomUUID(),
+      bootstrapFetcher: vi.fn().mockResolvedValue({
+        lastSyncId: 0,
+        subscribedSyncGroups: [],
+        models: {},
+      }),
+      syncUrl: "http://primary/events",
+      modelStreamUrls: ["http://calc-service/events"],
+      sseClientFactory: factory,
+    });
+
+    await agent.bootstrap();
+
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toContain("primary");
+    expect(calls[1]).toContain("calc-service");
+
+    await agent.teardown();
+  });
+
+  it("teardown disconnects all model streams", async () => {
+    const clients: SSEClient[] = [];
+    const factory: SSEClientFactory = (url) => {
+      const c = noopSSEClient();
+      clients.push(c);
+      return c;
+    };
+
+    const agent = new StoreManager({
+      workspaceId: crypto.randomUUID(),
+      bootstrapFetcher: vi.fn().mockResolvedValue({
+        lastSyncId: 0,
+        subscribedSyncGroups: [],
+        models: {},
+      }),
+      modelStreamUrls: ["http://calc/events", "http://analytics/events"],
+      sseClientFactory: factory,
+    });
+
+    await agent.bootstrap();
+    expect(clients).toHaveLength(2);
+
+    await agent.teardown();
+
+    for (const c of clients) {
+      expect(c.close).toHaveBeenCalled();
+    }
+  });
+
+  it("model stream updates are applied to the pool", async () => {
+    let capturedClient: SSEClient | null = null;
+    const factory: SSEClientFactory = (url) => {
+      const c = noopSSEClient();
+      capturedClient = c;
+      return c;
+    };
+
+    const agent = new StoreManager({
+      workspaceId: crypto.randomUUID(),
+      bootstrapFetcher: vi.fn().mockResolvedValue({
+        lastSyncId: 0,
+        subscribedSyncGroups: [],
+        models: {},
+      }),
+      modelStreamUrls: ["http://calc/events"],
+      sseClientFactory: factory,
+      storageAdapter: new MemoryAdapter(),
+    });
+
+    await agent.bootstrap();
+
+    capturedClient!.onmessage!({
+      data: JSON.stringify({
+        modelName: "TestTask",
+        modelId: "calc-1",
+        data: { title: "Calculated value", done: true },
+      }),
+    } as MessageEvent);
+
+    await vi.waitFor(() => {
+      const task = agent.objectPool.getById("TestTask", "calc-1") as TestTask;
+      expect(task).toBeDefined();
+      expect(task.title).toBe("Calculated value");
+    });
+
+    await agent.teardown();
+  });
+});
+
 // ── 3. Isolated sessions converge via delta ───────────────────────────────────
 
 describe("Isolated agent sessions", () => {

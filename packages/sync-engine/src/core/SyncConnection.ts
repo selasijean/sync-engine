@@ -23,6 +23,17 @@ import { ObjectPool } from "./ObjectPool";
 import { ModelRegistry } from "./ModelRegistry";
 import { TransactionQueue } from "./TransactionQueue";
 import { LoadStrategy, PropertyType, type ModelMeta } from "./types";
+import {
+  BaseSSEConnection,
+  type SSEClientFactory,
+} from "./BaseSSEConnection";
+
+// Re-export so existing imports from "@sync-engine/SyncConnection" keep working.
+export {
+  type SSEClient,
+  type SSEClientFactory,
+  browserSSEFactory,
+} from "./BaseSSEConnection";
 
 export interface SyncAction {
   id: number;
@@ -47,47 +58,13 @@ export type SyncGroupChangeHandler = (
   removedGroups: string[],
 ) => Promise<void>;
 
-/**
- * Minimal interface for an SSE client.
- *
- * The browser's built-in EventSource satisfies this. In Node.js / agent
- * environments, pass any object that exposes the same three members —
- * e.g. the `eventsource` npm package or a fetch-based SSE reader.
- *
- * Example Node.js adapter using the `eventsource` package:
- *
- *   import EventSource from "eventsource";
- *   const sseClientFactory: SSEClientFactory = (url) => new EventSource(url);
- */
-export interface SSEClient {
-  onmessage: ((event: { data: string }) => void) | null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onerror: ((event?: any) => void) | null;
-  close(): void;
-}
-
-export type SSEClientFactory = (url: string) => SSEClient;
-
-/** Default factory — uses the browser's built-in EventSource. */
-const browserSSEFactory: SSEClientFactory = (url) => new EventSource(url);
-
-export class SyncConnection {
-  private eventSource: SSEClient | null = null;
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-
-  /**
-   * Sequential processing lock. Ensures all steps run inside
-   * updateLock.runExclusive so that a delta packet is fully processed
-   * before processing the next one.
-   *
-   * Without this, two rapid packets could interleave their async IDB writes
-   * and ObjectPool mutations, producing inconsistent state.
-   */
+export class SyncConnection extends BaseSSEConnection {
+  // Serializes packet processing to prevent interleaved async mutations.
   private packetQueue: DeltaPacket[] = [];
   private processing = false;
 
   constructor(
-    private url: string,
+    url: string,
     private database: StorageAdapter,
     private pool: ObjectPool,
     private queue: TransactionQueue,
@@ -98,81 +75,25 @@ export class SyncConnection {
       indexKey: string,
       value: string,
     ) => boolean,
-    private sseClientFactory: SSEClientFactory = browserSSEFactory,
-  ) {}
-
-  /**
-   * Opens an SSE connection to the server's /api/events endpoint.
-   *
-   * We do NOT rely on EventSource's built-in auto-reconnect because it
-   * reconnects to the original URL — which has a stale lastSyncId. Instead,
-   * on error we close the EventSource and manually reopen with the current
-   * lastSyncId from IDB meta. The server's catch-up phase fills any gap.
-   */
-  connect() {
-    this.openEventSource();
+    sseClientFactory?: SSEClientFactory,
+  ) {
+    super(url, sseClientFactory);
   }
 
-  reconnect() {
-    this.openEventSource();
-  }
-
-  disconnect() {
-    if (this.reconnectTimer != null) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-    this.eventSource?.close();
-    this.eventSource = null;
-  }
-
-  get isConnected() {
-    return this.eventSource != null;
-  }
-
-  private openEventSource() {
-    // Close any existing connection.
-    this.eventSource?.close();
-
-    // Build URL with the CURRENT lastSyncId (not the one from initial connect).
+  protected buildUrl(): string {
     const meta = this.database.currentMeta;
     const lastSyncId = meta?.lastSyncId ?? 0;
     const syncGroups = (meta?.subscribedSyncGroups ?? []).join(",");
-    const url = `${this.url}?lastSyncId=${lastSyncId}&syncGroups=${encodeURIComponent(syncGroups)}`;
-
-    try {
-      this.eventSource = this.sseClientFactory(url);
-
-      this.eventSource.onmessage = (e) => {
-        try {
-          const action = JSON.parse(e.data);
-          this.enqueuePacket({ syncActions: [action] });
-        } catch {
-          /* no-op: malformed JSON is ignored */
-        }
-      };
-
-      this.eventSource.onerror = () => {
-        // Don't use EventSource's built-in reconnect — it would use the stale URL.
-        // Close it and reconnect manually with the updated lastSyncId.
-        this.eventSource?.close();
-        this.eventSource = null;
-        this.scheduleReconnect();
-      };
-    } catch {
-      /* no-op: EventSource construction failed */
-    }
+    return `${this.url}?lastSyncId=${lastSyncId}&syncGroups=${encodeURIComponent(syncGroups)}`;
   }
 
-  private scheduleReconnect() {
-    if (this.reconnectTimer != null) {
-      return;
-    }
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      this.openEventSource();
-      this.queue.resendCached();
-    }, 3000);
+  protected onMessage(data: string): void {
+    const action = JSON.parse(data);
+    this.enqueuePacket({ syncActions: [action] });
+  }
+
+  protected onReconnect(): void {
+    this.queue.resendCached();
   }
 
   // =========================================================================

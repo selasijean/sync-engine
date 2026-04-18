@@ -34,6 +34,7 @@ import {
   type DeltaPacket,
   type SSEClientFactory,
 } from "./SyncConnection";
+import { ModelStream } from "./ModelStream";
 import { BaseModel } from "./BaseModel";
 import {
   BootstrapPhase,
@@ -116,6 +117,9 @@ export interface StoreManagerConfig {
   syncGroupFetcher?: SyncGroupFetcher;
   syncUrl?: string;
 
+  /** URLs for secondary model update streams (e.g. a calculation service). */
+  modelStreamUrls?: string[];
+
   /**
    * Custom SSE client factory. Defaults to the browser's built-in EventSource.
    * Override to use the engine outside the browser — e.g. in Node.js or an agent:
@@ -193,6 +197,7 @@ export class StoreManager {
 
   private stores = new Map<string, ModelStore>();
   private syncConnection: SyncConnection | null = null;
+  private modelStreams: ModelStream[] = [];
   private config: StoreManagerConfig;
   private _phase = BootstrapPhase.Idle;
   private _error: Error | null = null;
@@ -290,6 +295,16 @@ export class StoreManager {
           this.config.sseClientFactory,
         );
         this.syncConnection.connect();
+      }
+      for (const url of this.config.modelStreamUrls ?? []) {
+        const stream = new ModelStream(
+          url,
+          this.database,
+          this.objectPool,
+          this.config.sseClientFactory,
+        );
+        stream.connect();
+        this.modelStreams.push(stream);
       }
       await this.transactionQueue.resendCached();
 
@@ -1136,6 +1151,10 @@ export class StoreManager {
   async teardown() {
     BaseModel.storeManager = null;
     this.syncConnection?.disconnect();
+    for (const stream of this.modelStreams) {
+      stream.disconnect();
+    }
+    this.modelStreams = [];
     this.transactionQueue.destroy();
     await this.database.close();
     this.objectPool.clear();
