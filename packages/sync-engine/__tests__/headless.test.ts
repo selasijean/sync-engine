@@ -314,7 +314,7 @@ describe("modelStreams wiring", () => {
     }
   });
 
-  it("model stream updates are applied to the pool", async () => {
+  it("model stream updates existing pool models", async () => {
     let capturedClient: SSEClient | null = null;
     const factory: SSEClientFactory = (url) => {
       const c = noopSSEClient();
@@ -327,7 +327,9 @@ describe("modelStreams wiring", () => {
       bootstrapFetcher: vi.fn().mockResolvedValue({
         lastSyncId: 0,
         subscribedSyncGroups: [],
-        models: {},
+        models: {
+          TestTask: [{ id: "calc-1", title: "Original", done: false }],
+        },
       }),
       modelStreams: [{ url: "http://calc/events" }],
       sseClientFactory: factory,
@@ -348,6 +350,7 @@ describe("modelStreams wiring", () => {
       const task = agent.objectPool.getById("TestTask", "calc-1") as TestTask;
       expect(task).toBeDefined();
       expect(task.title).toBe("Calculated value");
+      expect(task.done).toBe(true);
     });
 
     await agent.teardown();

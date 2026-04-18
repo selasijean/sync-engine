@@ -82,8 +82,6 @@ export class ModelStream extends BaseSSEConnection {
     if (existing != null) {
       existing.hydrate(data);
       this.pool.put(modelName, existing);
-    } else {
-      this.pool.hydrateAndPut(modelName, modelMeta, record);
     }
   }
 }

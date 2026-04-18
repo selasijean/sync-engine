@@ -90,7 +90,7 @@ describe("ModelStream", () => {
   });
 
   describe("applyUpdate — upsert", () => {
-    it("inserts a new model into pool and writes to storage", async () => {
+    it("writes to storage but does not hydrate new models into pool", async () => {
       const client = controllableSSEClient();
       const stream = new ModelStream(
         "http://calc/events",
@@ -108,14 +108,12 @@ describe("ModelStream", () => {
       });
 
       await vi.waitFor(async () => {
-        const task = pool.getById("TestTask", "t1") as TestTask | undefined;
-        expect(task).toBeDefined();
-        expect(task!.title).toBe("Calculated");
+        const stored = await adapter.readModel("TestTask", "t1");
+        expect(stored).not.toBeNull();
+        expect(stored!.title).toBe("Calculated");
       });
 
-      const stored = await adapter.readModel("TestTask", "t1");
-      expect(stored).not.toBeNull();
-      expect(stored!.title).toBe("Calculated");
+      expect(pool.getById("TestTask", "t1")).toBeUndefined();
 
       stream.disconnect();
     });
@@ -217,7 +215,7 @@ describe("ModelStream", () => {
   });
 
   describe("ephemeral models", () => {
-    it("hydrates into pool but skips IDB write", async () => {
+    it("skips IDB and does not hydrate new ephemeral models", async () => {
       const client = controllableSSEClient();
       const stream = new ModelStream(
         "http://calc/events",
@@ -234,12 +232,8 @@ describe("ModelStream", () => {
         data: { value: 42, label: "cpu" },
       });
 
-      await vi.waitFor(() => {
-        const metric = pool.getById("TestMetric", "m1") as TestMetric | undefined;
-        expect(metric).toBeDefined();
-        expect(metric!.value).toBe(42);
-        expect(metric!.label).toBe("cpu");
-      });
+      await new Promise((r) => setTimeout(r, 10));
+      expect(pool.getById("TestMetric", "m1")).toBeUndefined();
 
       const stored = await adapter.readModel("TestMetric", "m1");
       expect(stored).toBeNull();
