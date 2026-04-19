@@ -353,6 +353,111 @@ describe("activateSyncGroup() with fetch: false", () => {
   });
 });
 
+// ── activateSyncGroup() — ephemeral: true ─────────────────────────────────────
+
+describe("activateSyncGroup() with ephemeral: true", () => {
+  it("hydrates models into the pool and writes to IDB as usual", async () => {
+    const syncGroupFetcher = vi.fn().mockResolvedValue({
+      TestLayeredDriver: [
+        { id: "d1", layerId: "layer-A", name: "Alpha" },
+      ],
+    });
+    manager = await makeManager({ syncGroupFetcher });
+
+    await manager.activateSyncGroup("layer-A", { ephemeral: true });
+
+    expect(manager.objectPool.getById("TestLayeredDriver", "d1")).toBeDefined();
+    expect(
+      await manager.database.readModel("TestLayeredDriver", "d1"),
+    ).toMatchObject({ id: "d1", name: "Alpha" });
+  });
+
+  it("adds the group to in-memory meta but does not call saveMeta", async () => {
+    const syncGroupFetcher = vi.fn().mockResolvedValue({});
+    manager = await makeManager({ syncGroupFetcher });
+
+    const saveMetaSpy = vi.spyOn(manager.database, "saveMeta");
+
+    await manager.activateSyncGroup("layer-A", { ephemeral: true });
+
+    // In-memory meta has the group
+    expect(manager.database.currentMeta?.subscribedSyncGroups).toContain(
+      "layer-A",
+    );
+    // saveMeta was not called
+    expect(saveMetaSpy).not.toHaveBeenCalled();
+  });
+
+  it("still reconnects SSE with the group in the URL", async () => {
+    const { factory, urls } = recordingSSEFactory();
+    const syncGroupFetcher = vi.fn().mockResolvedValue({});
+
+    manager = new StoreManager({
+      workspaceId: crypto.randomUUID(),
+      bootstrapFetcher: vi.fn().mockResolvedValue({
+        lastSyncId: 0,
+        subscribedSyncGroups: [],
+        models: {},
+      }),
+      syncGroupFetcher,
+      syncUrl: "http://test/events",
+      sseClientFactory: factory,
+    });
+    await manager.bootstrap();
+
+    const urlsBefore = urls.length;
+    await manager.activateSyncGroup("layer-A", { ephemeral: true });
+
+    expect(urls.length).toBeGreaterThan(urlsBefore);
+    expect(urls[urls.length - 1]).toContain("layer-A");
+  });
+
+  it("deactivate removes ephemeral group from pool and meta", async () => {
+    const syncGroupFetcher = vi.fn().mockResolvedValue({
+      TestLayeredDriver: [
+        { id: "d1", layerId: "layer-A", name: "Alpha" },
+      ],
+    });
+    manager = await makeManager({ syncGroupFetcher });
+
+    await manager.activateSyncGroup("layer-A", { ephemeral: true });
+    expect(manager.objectPool.getById("TestLayeredDriver", "d1")).toBeDefined();
+
+    await manager.deactivateSyncGroup("layer-A");
+    expect(
+      manager.objectPool.getById("TestLayeredDriver", "d1"),
+    ).toBeUndefined();
+    expect(manager.database.currentMeta?.subscribedSyncGroups).not.toContain(
+      "layer-A",
+    );
+  });
+
+  it("mixed persisted and ephemeral groups deactivate correctly", async () => {
+    const syncGroupFetcher = vi.fn().mockResolvedValue({
+      TestLayeredDriver: [],
+    });
+    manager = await makeManager({ syncGroupFetcher });
+
+    await manager.activateSyncGroup("layer-A", { ephemeral: false });
+    await manager.activateSyncGroup("layer-B", { ephemeral: true });
+    await seedLayer(manager, "layer-A", ["d-a"]);
+    await seedLayer(manager, "layer-B", ["d-b"]);
+
+    await manager.deactivateSyncGroup(["layer-A", "layer-B"]);
+
+    expect(
+      manager.objectPool.getById("TestLayeredDriver", "d-a"),
+    ).toBeUndefined();
+    expect(
+      manager.objectPool.getById("TestLayeredDriver", "d-b"),
+    ).toBeUndefined();
+    // layer-A was persisted, so its IDB records should be cleaned up
+    expect(
+      await manager.database.readModel("TestLayeredDriver", "d-a"),
+    ).toBeNull();
+  });
+});
+
 // ── deactivateSyncGroup() ─────────────────────────────────────────────────────
 
 describe("deactivateSyncGroup()", () => {

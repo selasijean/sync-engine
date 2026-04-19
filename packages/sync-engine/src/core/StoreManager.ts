@@ -800,13 +800,18 @@ export class StoreManager {
    * without fetching — useful when you want SSE deltas to start flowing but
    * will load models lazily later.
    *
+   * Pass `{ ephemeral: true }` for session-scoped groups that should not
+   * survive page reloads. The group subscription is kept in memory only —
+   * models are still written to IDB as usual, but the group itself is not
+   * saved to meta.
+   *
    * Idempotent — does nothing if the group is already active.
    *
    * Requires syncGroupFetcher to be configured when fetch is true (default).
    */
   async activateSyncGroup(
     groupId: string | string[],
-    { fetch = true }: { fetch?: boolean } = {},
+    { fetch = true, ephemeral = false }: { fetch?: boolean; ephemeral?: boolean } = {},
   ): Promise<void> {
     const dbMeta = this.database.currentMeta;
     if (dbMeta == null) {
@@ -841,7 +846,9 @@ export class StoreManager {
     const groups = new Set(dbMeta.subscribedSyncGroups);
     newIds.forEach((id) => groups.add(id));
     dbMeta.subscribedSyncGroups = [...groups];
-    await this.database.saveMeta(dbMeta);
+    if (!ephemeral) {
+      await this.database.saveMeta(dbMeta);
+    }
     this.syncConnection?.reconnect();
   }
 
