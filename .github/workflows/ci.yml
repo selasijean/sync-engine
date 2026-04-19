@@ -22,6 +22,19 @@ jobs:
       - name: Type check webapp
         run: npx tsc --noEmit -p webapp/tsconfig.json
 
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Test sync-engine
+        run: npm test --workspace=sync-engine
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
