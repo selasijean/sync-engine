@@ -75,7 +75,13 @@ describe("ModelStream", () => {
         clients.push(c);
         return c;
       };
-      const stream = new ModelStream("http://calc/events", adapter, pool, undefined, factory);
+      const stream = new ModelStream(
+        "http://calc/events",
+        adapter,
+        pool,
+        undefined,
+        factory,
+      );
 
       stream.connect();
       expect(clients).toHaveLength(1);
@@ -335,7 +341,13 @@ describe("ModelStream", () => {
         clients.push(c);
         return c;
       };
-      const stream = new ModelStream("http://calc/events", adapter, pool, undefined, factory);
+      const stream = new ModelStream(
+        "http://calc/events",
+        adapter,
+        pool,
+        undefined,
+        factory,
+      );
 
       stream.connect();
       expect(clients).toHaveLength(1);
@@ -362,7 +374,13 @@ describe("ModelStream", () => {
         clients.push(c);
         return c;
       };
-      const stream = new ModelStream("http://calc/events", adapter, pool, undefined, factory);
+      const stream = new ModelStream(
+        "http://calc/events",
+        adapter,
+        pool,
+        undefined,
+        factory,
+      );
 
       stream.connect();
       (clients[0] as ReturnType<typeof controllableSSEClient>).triggerError();

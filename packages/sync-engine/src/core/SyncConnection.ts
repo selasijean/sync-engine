@@ -23,10 +23,7 @@ import { ObjectPool } from "./ObjectPool";
 import { ModelRegistry } from "./ModelRegistry";
 import { TransactionQueue } from "./TransactionQueue";
 import { LoadStrategy, PropertyType, type ModelMeta } from "./types";
-import {
-  BaseSSEConnection,
-  type SSEClientFactory,
-} from "./BaseSSEConnection";
+import { BaseSSEConnection, type SSEClientFactory } from "./BaseSSEConnection";
 
 // Re-export so existing imports from "@sync-engine/SyncConnection" keep working.
 export {

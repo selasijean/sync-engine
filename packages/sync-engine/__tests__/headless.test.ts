@@ -287,7 +287,7 @@ describe("modelStreams wiring", () => {
 
   it("teardown disconnects all model streams", async () => {
     const clients: SSEClient[] = [];
-    const factory: SSEClientFactory = (url) => {
+    const factory: SSEClientFactory = (_url) => {
       const c = noopSSEClient();
       clients.push(c);
       return c;
@@ -300,7 +300,10 @@ describe("modelStreams wiring", () => {
         subscribedSyncGroups: [],
         models: {},
       }),
-      modelStreams: [{ url: "http://calc/events" }, { url: "http://analytics/events" }],
+      modelStreams: [
+        { url: "http://calc/events" },
+        { url: "http://analytics/events" },
+      ],
       sseClientFactory: factory,
     });
 
@@ -316,7 +319,7 @@ describe("modelStreams wiring", () => {
 
   it("model stream updates existing pool models", async () => {
     let capturedClient: SSEClient | null = null;
-    const factory: SSEClientFactory = (url) => {
+    const factory: SSEClientFactory = (_url) => {
       const c = noopSSEClient();
       capturedClient = c;
       return c;

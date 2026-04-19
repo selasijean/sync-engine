@@ -14,6 +14,7 @@ import {
   TestUser,
   TestComment,
   TestActivity,
+  TestMetric,
   addToPool,
 } from "./fixtures";
 
@@ -851,6 +852,297 @@ describe("StoreManager", () => {
 
     it("redo returns null when nothing to redo", async () => {
       expect(await manager.redo()).toBeNull();
+    });
+  });
+
+  // ── Refresh APIs ───────────────────────────────────────────────────────────
+
+  describe("refreshCollection()", () => {
+    type OnDemandFetcher = (
+      modelName: string,
+      indexKey: string,
+      value: string,
+    ) => Promise<Record<string, unknown>[]>;
+    let onDemandFetcher: MockedFunction<OnDemandFetcher>;
+    let sm: StoreManager;
+
+    beforeEach(async () => {
+      onDemandFetcher = vi.fn().mockResolvedValue([]);
+      sm = new StoreManager({
+        workspaceId: crypto.randomUUID(),
+        bootstrapFetcher: vi.fn(),
+        onDemandFetcher,
+      });
+      await sm.database.connect();
+    });
+
+    afterEach(async () => {
+      await sm.teardown();
+    });
+
+    it("updates existing models in-place and preserves object identity", async () => {
+      onDemandFetcher.mockResolvedValueOnce([
+        { id: "a1", taskId: "t1", text: "original" },
+      ]);
+      await sm.loadCollection("TestActivity", "taskId", "t1");
+      expect(onDemandFetcher).toHaveBeenCalledTimes(1);
+
+      const originalRef = sm.objectPool.getById("TestActivity", "a1");
+
+      onDemandFetcher.mockResolvedValueOnce([
+        { id: "a1", taskId: "t1", text: "refreshed" },
+        { id: "a2", taskId: "t1", text: "new" },
+      ]);
+      const results = await sm.refreshCollection(
+        "TestActivity",
+        "taskId",
+        "t1",
+      );
+
+      expect(onDemandFetcher).toHaveBeenCalledTimes(2);
+      expect(results).toHaveLength(2);
+      expect(
+        (sm.objectPool.getById("TestActivity", "a1") as TestActivity).text,
+      ).toBe("refreshed");
+      // Same object reference — not a new instance
+      expect(sm.objectPool.getById("TestActivity", "a1")).toBe(originalRef);
+      expect(sm.objectPool.getById("TestActivity", "a2")).toBeDefined();
+    });
+
+    it("removes models the server no longer returns", async () => {
+      onDemandFetcher.mockResolvedValueOnce([
+        { id: "a1", taskId: "t1", text: "x" },
+        { id: "a2", taskId: "t1", text: "y" },
+      ]);
+      await sm.loadCollection("TestActivity", "taskId", "t1");
+      expect(sm.objectPool.getAll("TestActivity")).toHaveLength(2);
+
+      onDemandFetcher.mockResolvedValueOnce([
+        { id: "a1", taskId: "t1", text: "x" },
+      ]);
+      const results = await sm.refreshCollection(
+        "TestActivity",
+        "taskId",
+        "t1",
+      );
+
+      expect(results).toHaveLength(1);
+      expect(sm.objectPool.getById("TestActivity", "a2")).toBeUndefined();
+    });
+
+    it("works with ephemeral models (skips IDB)", async () => {
+      onDemandFetcher.mockResolvedValueOnce([
+        { id: "m1", value: 10, label: "cpu" },
+      ]);
+      await sm.loadCollection("TestMetric", "label", "cpu");
+      expect(
+        (sm.objectPool.getById("TestMetric", "m1") as TestMetric).value,
+      ).toBe(10);
+
+      onDemandFetcher.mockResolvedValueOnce([
+        { id: "m1", value: 99, label: "cpu" },
+      ]);
+      const results = await sm.refreshCollection("TestMetric", "label", "cpu");
+
+      expect(results).toHaveLength(1);
+      expect(
+        (sm.objectPool.getById("TestMetric", "m1") as TestMetric).value,
+      ).toBe(99);
+    });
+  });
+
+  describe("refreshModels()", () => {
+    type OnDemandBatchFetcher = (
+      modelName: string,
+      ids: string[],
+    ) => Promise<Record<string, unknown>[]>;
+    let onDemandFetcher: MockedFunction<
+      (m: string, k: string, v: string) => Promise<Record<string, unknown>[]>
+    >;
+    let onDemandBatchFetcher: MockedFunction<OnDemandBatchFetcher>;
+    let sm: StoreManager;
+
+    beforeEach(async () => {
+      onDemandFetcher = vi.fn().mockResolvedValue([]);
+      onDemandBatchFetcher = vi.fn().mockResolvedValue([]);
+      sm = new StoreManager({
+        workspaceId: crypto.randomUUID(),
+        bootstrapFetcher: vi.fn(),
+        onDemandFetcher,
+        onDemandBatchFetcher,
+      });
+      await sm.database.connect();
+    });
+
+    afterEach(async () => {
+      await sm.teardown();
+    });
+
+    it("updates existing models in-place and preserves object identity", async () => {
+      onDemandBatchFetcher.mockResolvedValueOnce([
+        { id: "a1", taskId: "t1", text: "original" },
+      ]);
+      await sm.loadByIds("TestActivity", ["a1"]);
+      const originalRef = sm.objectPool.getById("TestActivity", "a1");
+      expect((originalRef as TestActivity).text).toBe("original");
+
+      onDemandBatchFetcher.mockResolvedValueOnce([
+        { id: "a1", taskId: "t1", text: "refreshed" },
+      ]);
+      const results = await sm.refreshModels("TestActivity", ["a1"]);
+
+      expect(results).toHaveLength(1);
+      expect(
+        (sm.objectPool.getById("TestActivity", "a1") as TestActivity).text,
+      ).toBe("refreshed");
+      // Same object reference
+      expect(sm.objectPool.getById("TestActivity", "a1")).toBe(originalRef);
+    });
+
+    it("returns empty array for empty ids", async () => {
+      const results = await sm.refreshModels("TestActivity", []);
+      expect(results).toEqual([]);
+    });
+
+    it("works with ephemeral models (skips IDB)", async () => {
+      onDemandBatchFetcher.mockResolvedValueOnce([
+        { id: "m1", value: 10, label: "cpu" },
+      ]);
+      await sm.loadByIds("TestMetric", ["m1"]);
+      expect(
+        (sm.objectPool.getById("TestMetric", "m1") as TestMetric).value,
+      ).toBe(10);
+
+      onDemandBatchFetcher.mockResolvedValueOnce([
+        { id: "m1", value: 99, label: "cpu" },
+      ]);
+      const results = await sm.refreshModels("TestMetric", ["m1"]);
+
+      expect(results).toHaveLength(1);
+      expect(
+        (sm.objectPool.getById("TestMetric", "m1") as TestMetric).value,
+      ).toBe(99);
+    });
+  });
+
+  describe("refreshAllOfModel()", () => {
+    type OnDemandFetcher = (
+      modelName: string,
+      indexKey: string,
+      value: string,
+    ) => Promise<Record<string, unknown>[]>;
+    let onDemandFetcher: MockedFunction<OnDemandFetcher>;
+    let sm: StoreManager;
+
+    beforeEach(async () => {
+      onDemandFetcher = vi.fn().mockResolvedValue([]);
+      sm = new StoreManager({
+        workspaceId: crypto.randomUUID(),
+        bootstrapFetcher: vi.fn(),
+        onDemandFetcher,
+      });
+      await sm.database.connect();
+    });
+
+    afterEach(async () => {
+      await sm.teardown();
+    });
+
+    it("re-fetches all previously loaded collections for a model", async () => {
+      onDemandFetcher.mockResolvedValueOnce([
+        { id: "a1", taskId: "t1", text: "first" },
+      ]);
+      await sm.loadCollection("TestActivity", "taskId", "t1");
+
+      onDemandFetcher.mockResolvedValueOnce([
+        { id: "a2", taskId: "t2", text: "second" },
+      ]);
+      await sm.loadCollection("TestActivity", "taskId", "t2");
+
+      expect(onDemandFetcher).toHaveBeenCalledTimes(2);
+
+      // Refresh — should re-fetch both collections
+      onDemandFetcher.mockResolvedValueOnce([
+        { id: "a1", taskId: "t1", text: "refreshed-1" },
+      ]);
+      onDemandFetcher.mockResolvedValueOnce([
+        { id: "a2", taskId: "t2", text: "refreshed-2" },
+      ]);
+      await sm.refreshAllOfModel("TestActivity");
+
+      expect(onDemandFetcher).toHaveBeenCalledTimes(4);
+      expect(
+        (sm.objectPool.getById("TestActivity", "a1") as TestActivity).text,
+      ).toBe("refreshed-1");
+      expect(
+        (sm.objectPool.getById("TestActivity", "a2") as TestActivity).text,
+      ).toBe("refreshed-2");
+    });
+
+    it("re-fetches individually loaded IDs not covered by collections", async () => {
+      const onDemandBatchFetcher = vi.fn().mockResolvedValue([]);
+
+      // Create a StoreManager with both fetchers
+      const smWithBatch = new StoreManager({
+        workspaceId: crypto.randomUUID(),
+        bootstrapFetcher: vi.fn(),
+        onDemandFetcher,
+        onDemandBatchFetcher,
+      });
+      await smWithBatch.database.connect();
+
+      // Load a collection
+      onDemandFetcher.mockResolvedValueOnce([
+        { id: "a1", taskId: "t1", text: "coll" },
+      ]);
+      await smWithBatch.loadCollection("TestActivity", "taskId", "t1");
+
+      // Load an individual model by ID (not part of any collection)
+      onDemandBatchFetcher.mockResolvedValueOnce([
+        { id: "a9", taskId: "t9", text: "individual" },
+      ]);
+      await smWithBatch.loadByIds("TestActivity", ["a9"]);
+      expect(
+        smWithBatch.objectPool.getById("TestActivity", "a9"),
+      ).toBeDefined();
+
+      // Refresh all — should re-fetch both the collection and the individual ID
+      onDemandFetcher.mockResolvedValueOnce([
+        { id: "a1", taskId: "t1", text: "coll-refreshed" },
+      ]);
+      onDemandBatchFetcher.mockResolvedValueOnce([
+        { id: "a9", taskId: "t9", text: "individual-refreshed" },
+      ]);
+      await smWithBatch.refreshAllOfModel("TestActivity");
+
+      expect(
+        (smWithBatch.objectPool.getById("TestActivity", "a1") as TestActivity)
+          .text,
+      ).toBe("coll-refreshed");
+      expect(
+        (smWithBatch.objectPool.getById("TestActivity", "a9") as TestActivity)
+          .text,
+      ).toBe("individual-refreshed");
+
+      await smWithBatch.teardown();
+    });
+
+    it("removes models the server no longer returns", async () => {
+      onDemandFetcher.mockResolvedValueOnce([
+        { id: "a1", taskId: "t1", text: "x" },
+        { id: "a2", taskId: "t1", text: "y" },
+      ]);
+      await sm.loadCollection("TestActivity", "taskId", "t1");
+      expect(sm.objectPool.getAll("TestActivity")).toHaveLength(2);
+
+      // Server now returns only one record (a2 was deleted)
+      onDemandFetcher.mockResolvedValueOnce([
+        { id: "a1", taskId: "t1", text: "x" },
+      ]);
+      await sm.refreshAllOfModel("TestActivity");
+
+      expect(sm.objectPool.getAll("TestActivity")).toHaveLength(1);
+      expect(sm.objectPool.getById("TestActivity", "a2")).toBeUndefined();
     });
   });
 });

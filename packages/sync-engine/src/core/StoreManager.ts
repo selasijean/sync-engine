@@ -27,7 +27,12 @@ import {
   type StorageAdapter,
   type DatabaseMeta,
 } from "./Database";
-import { FullStore, PartialStore, EphemeralStore, type ModelStore } from "./Store";
+import {
+  FullStore,
+  PartialStore,
+  EphemeralStore,
+  type ModelStore,
+} from "./Store";
 import { TransactionQueue, type TransactionSender } from "./TransactionQueue";
 import {
   SyncConnection,
@@ -874,7 +879,7 @@ export class StoreManager {
         .filter((m) => groupsToEvict.has(prop(m, field) as string));
       for (const m of toEvict) {
         this.objectPool.remove(modelMeta.name, m.id);
-        this.loadedIds.delete(`${modelMeta.name}:${m.id}`);
+        this.loadedIds.delete(StoreManager.modelIdKey(modelMeta.name, m.id));
       }
       for (const id of groupsToEvict) {
         this.loadedCollections.delete(
@@ -957,6 +962,29 @@ export class StoreManager {
     return `${modelName}:${indexKey}:${value}`;
   }
 
+  private static parseCollectionKey(
+    key: string,
+    modelName: string,
+  ): { indexKey: string; value: string } | null {
+    const prefix = `${modelName}:`;
+    if (!key.startsWith(prefix)) {
+      return null;
+    }
+    const rest = key.slice(prefix.length);
+    const separatorIdx = rest.indexOf(":");
+    if (separatorIdx === -1) {
+      return null;
+    }
+    return {
+      indexKey: rest.slice(0, separatorIdx),
+      value: rest.slice(separatorIdx + 1),
+    };
+  }
+
+  private static modelIdKey(modelName: string, id: string): string {
+    return `${modelName}:${id}`;
+  }
+
   /** Load all instances where indexKey === value (e.g. all Issues for a team). */
   async loadCollection<T extends BaseModel = BaseModel>(
     modelName: string,
@@ -970,6 +998,9 @@ export class StoreManager {
 
     const key = StoreManager.collectionKey(modelName, indexKey, value);
     const meta = ModelRegistry.getModelMeta(modelName);
+
+    const isEphemeral = meta?.loadStrategy === LoadStrategy.Ephemeral;
+    const results = [...inMemory] as T[];
 
     if (
       meta?.loadStrategy !== LoadStrategy.Instant &&
@@ -996,26 +1027,39 @@ export class StoreManager {
         value,
       );
       if (serverRecords.length > 0) {
-        await this.database.writeModels(modelName, serverRecords);
+        if (isEphemeral) {
+          // Ephemeral models skip IDB — hydrate directly into the pool
+          for (const record of serverRecords) {
+            if (!inMemoryIds.has(record.id as string)) {
+              results.push(
+                this.objectPool.hydrateAndPut(modelName, meta!, record) as T,
+              );
+              inMemoryIds.add(record.id as string);
+            }
+          }
+        } else {
+          await this.database.writeModels(modelName, serverRecords);
+        }
       }
       // Mark loaded before the IDB read so SSE inserts arriving during
       // that read are hydrated directly rather than waiting for next access.
       this.loadedCollections.add(key);
     }
 
-    const idbRecords = await this.database.readModelsByIndex(
-      modelName,
-      indexKey,
-      value,
-    );
-    const results = [...inMemory] as T[];
+    if (!isEphemeral) {
+      const idbRecords = await this.database.readModelsByIndex(
+        modelName,
+        indexKey,
+        value,
+      );
 
-    if (meta != null) {
-      for (const record of idbRecords) {
-        if (!inMemoryIds.has(record.id as string)) {
-          results.push(
-            this.objectPool.hydrateAndPut(modelName, meta, record) as T,
-          );
+      if (meta != null) {
+        for (const record of idbRecords) {
+          if (!inMemoryIds.has(record.id as string)) {
+            results.push(
+              this.objectPool.hydrateAndPut(modelName, meta, record) as T,
+            );
+          }
         }
       }
     }
@@ -1049,24 +1093,30 @@ export class StoreManager {
       (id) => this.objectPool.getById(modelName, id) == null,
     );
 
-    if (missingFromPool.length > 0) {
-      const idbResults = await Promise.all(
-        missingFromPool.map((id) => this.database.readModel(modelName, id)),
-      );
+    const isEphemeral = meta.loadStrategy === LoadStrategy.Ephemeral;
 
-      const stillMissing: string[] = [];
-      for (let i = 0; i < missingFromPool.length; i++) {
-        const record = idbResults[i];
-        if (record != null) {
-          this.objectPool.hydrateAndPut(modelName, meta, record);
-        } else {
-          stillMissing.push(missingFromPool[i]);
+    if (missingFromPool.length > 0) {
+      let stillMissing = missingFromPool;
+
+      if (!isEphemeral) {
+        const idbResults = await Promise.all(
+          missingFromPool.map((id) => this.database.readModel(modelName, id)),
+        );
+
+        stillMissing = [];
+        for (let i = 0; i < missingFromPool.length; i++) {
+          const record = idbResults[i];
+          if (record != null) {
+            this.objectPool.hydrateAndPut(modelName, meta, record);
+          } else {
+            stillMissing.push(missingFromPool[i]);
+          }
         }
       }
 
       if (stillMissing.length > 0) {
         const unloaded = stillMissing.filter(
-          (id) => !this.loadedIds.has(`${modelName}:${id}`),
+          (id) => !this.loadedIds.has(StoreManager.modelIdKey(modelName, id)),
         );
         if (unloaded.length > 0) {
           if (this.config.onDemandBatchFetcher != null) {
@@ -1075,13 +1125,15 @@ export class StoreManager {
               unloaded,
             );
             if (serverRecords.length > 0) {
-              await this.database.writeModels(modelName, serverRecords);
+              if (!isEphemeral) {
+                await this.database.writeModels(modelName, serverRecords);
+              }
               for (const record of serverRecords) {
                 this.objectPool.hydrateAndPut(modelName, meta, record);
               }
             }
             for (const id of unloaded) {
-              this.loadedIds.add(`${modelName}:${id}`);
+              this.loadedIds.add(StoreManager.modelIdKey(modelName, id));
             }
           } else {
             await Promise.all(
@@ -1107,10 +1159,15 @@ export class StoreManager {
       return existing as T;
     }
 
-    // Check IDB before hitting the server — server is last resort.
-    let record = await this.database.readModel(modelName, id);
+    const meta = ModelRegistry.getModelMeta(modelName);
+    const isEphemeral = meta?.loadStrategy === LoadStrategy.Ephemeral;
 
-    const idKey = `${modelName}:${id}`;
+    // Check IDB before hitting the server — server is last resort.
+    let record = isEphemeral
+      ? null
+      : await this.database.readModel(modelName, id);
+
+    const idKey = StoreManager.modelIdKey(modelName, id);
     if (
       record == null &&
       this.config.onDemandFetcher != null &&
@@ -1122,8 +1179,12 @@ export class StoreManager {
         id,
       );
       if (serverRecords.length > 0) {
-        await this.database.writeModels(modelName, serverRecords);
-        record = await this.database.readModel(modelName, id);
+        if (isEphemeral) {
+          record = serverRecords.find((r) => r.id === id) ?? null;
+        } else {
+          await this.database.writeModels(modelName, serverRecords);
+          record = await this.database.readModel(modelName, id);
+        }
       }
       this.loadedIds.add(idKey);
     }
@@ -1131,13 +1192,155 @@ export class StoreManager {
     if (record == null) {
       return null;
     }
-
-    const meta = ModelRegistry.getModelMeta(modelName);
     if (meta == null) {
       return null;
     }
 
     return this.objectPool.hydrateAndPut(modelName, meta, record) as T;
+  }
+
+  // ── Refresh ──────────────────────────────────────────────────────────────
+
+  /**
+   * Re-fetch a collection from the server, replacing stale pool data.
+   * Existing instances are updated in-place so references held by
+   * components/hooks remain valid. Models the server no longer returns
+   * are removed from the pool.
+   */
+  async refreshCollection<T extends BaseModel = BaseModel>(
+    modelName: string,
+    indexKey: string,
+    value: string,
+  ): Promise<T[]> {
+    const meta = ModelRegistry.getModelMeta(modelName);
+    if (meta == null || this.config.onDemandFetcher == null) {
+      return [];
+    }
+
+    const key = StoreManager.collectionKey(modelName, indexKey, value);
+    const isEphemeral = meta.loadStrategy === LoadStrategy.Ephemeral;
+
+    const previousIds = new Set(
+      this.objectPool
+        .getAll(modelName)
+        .filter((m) => prop(m, indexKey) === value)
+        .map((m) => m.id),
+    );
+
+    const serverRecords = await this.config.onDemandFetcher(
+      modelName,
+      indexKey,
+      value,
+    );
+
+    if (!isEphemeral) {
+      await this.database.deleteModelsByIndex(modelName, indexKey, value);
+      if (serverRecords.length > 0) {
+        await this.database.writeModels(modelName, serverRecords);
+      }
+    }
+
+    const results: T[] = [];
+    for (const record of serverRecords) {
+      results.push(this.objectPool.hydrateAndPut(modelName, meta, record) as T);
+    }
+
+    const freshIds = new Set(serverRecords.map((r) => r.id as string));
+    for (const id of previousIds) {
+      if (!freshIds.has(id)) {
+        this.objectPool.remove(modelName, id);
+      }
+    }
+
+    this.loadedCollections.add(key);
+    return results;
+  }
+
+  /**
+   * Re-fetch specific models by ID from the server.
+   * Existing instances are updated in-place so references remain valid.
+   */
+  async refreshModels(modelName: string, ids: string[]): Promise<BaseModel[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const meta = ModelRegistry.getModelMeta(modelName);
+    if (meta == null) {
+      return [];
+    }
+
+    const isEphemeral = meta.loadStrategy === LoadStrategy.Ephemeral;
+    let serverRecords: Record<string, unknown>[] = [];
+
+    if (this.config.onDemandBatchFetcher != null) {
+      serverRecords = await this.config.onDemandBatchFetcher(modelName, ids);
+    } else if (this.config.onDemandFetcher != null) {
+      const fetched = await Promise.all(
+        ids.map((id) => this.config.onDemandFetcher!(modelName, "id", id)),
+      );
+      serverRecords = fetched.flat();
+    }
+
+    if (!isEphemeral) {
+      await this.database.deleteModels(modelName, ids);
+      if (serverRecords.length > 0) {
+        await this.database.writeModels(modelName, serverRecords);
+      }
+    }
+
+    for (const record of serverRecords) {
+      this.objectPool.hydrateAndPut(modelName, meta, record);
+    }
+
+    const returnedIds = new Set(serverRecords.map((r) => r.id as string));
+    for (const id of ids) {
+      if (!returnedIds.has(id)) {
+        this.objectPool.remove(modelName, id);
+      }
+      this.loadedIds.add(StoreManager.modelIdKey(modelName, id));
+    }
+
+    return ids
+      .map((id) => this.objectPool.getById(modelName, id))
+      .filter((m): m is BaseModel => m != null);
+  }
+
+  /**
+   * Re-fetch all previously loaded collections and models for a given model type.
+   * Existing instances are updated in-place so references remain valid.
+   * Models the server no longer returns are removed from the pool.
+   */
+  async refreshAllOfModel(modelName: string): Promise<void> {
+    const prefix = `${modelName}:`;
+
+    const collectionKeys: { indexKey: string; value: string }[] = [];
+    for (const key of [...this.loadedCollections]) {
+      const parsed = StoreManager.parseCollectionKey(key, modelName);
+      if (parsed != null) {
+        collectionKeys.push(parsed);
+      }
+    }
+
+    const modelIds: string[] = [];
+    for (const key of [...this.loadedIds]) {
+      if (key.startsWith(prefix)) {
+        modelIds.push(key.slice(prefix.length));
+      }
+    }
+
+    const collectionResults = await Promise.all(
+      collectionKeys.map(({ indexKey, value }) =>
+        this.refreshCollection(modelName, indexKey, value),
+      ),
+    );
+
+    // Only re-fetch IDs not already covered by a collection refresh
+    const refreshedIds = new Set(collectionResults.flat().map((m) => m.id));
+    const uncoveredIds = modelIds.filter((id) => !refreshedIds.has(id));
+    if (uncoveredIds.length > 0) {
+      await this.refreshModels(modelName, uncoveredIds);
+    }
   }
 
   // ── Status ────────────────────────────────────────────────────────────────

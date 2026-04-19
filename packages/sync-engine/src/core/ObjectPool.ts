@@ -98,13 +98,21 @@ export class ObjectPool {
   /**
    * Create an instance from raw data, hydrate it, make it observable,
    * and add it to the pool. Used everywhere a new model arrives from
-   * the server or IDB — eliminates the repeated 4-line pattern.
+   * the server or IDB.
    */
   hydrateAndPut(
     modelName: string,
     meta: ModelMeta,
     data: Record<string, unknown>,
   ): BaseModel {
+    const id = data.id as string | undefined;
+    if (id != null) {
+      const existing = this.getById(modelName, id);
+      if (existing != null) {
+        existing.hydrate(data);
+        return existing;
+      }
+    }
     const inst = new meta.ctor();
     inst.hydrate(data);
     inst.makeModelObservable();
