@@ -58,7 +58,7 @@ export class Issue extends BaseModel {
 - `@Property` — a persisted field, synced with the server
 - `@Reference` — a foreign key + resolved model instance (e.g. `issue.team`)
 - `@ReferenceCollection` — a one-to-many relationship, loaded lazily on demand
-- `loadStrategy: LoadStrategy.Instant` — loaded at bootstrap; use `Lazy` or `Partial` for large or infrequently-needed models
+- `loadStrategy: LoadStrategy.Instant` — loaded at bootstrap; use `Lazy` or `Partial` for large or infrequently-needed models, or `Ephemeral` for pool-only models that are never persisted to IDB
 
 ### Setup
 
@@ -86,6 +86,18 @@ export default function Providers({ children }) {
           return res.json();
         },
         syncUrl: "/api/events",
+
+        // Optional: secondary SSE connections for external services
+        modelStreams: [
+          {
+            url: "/calc/events",
+            onStatusChange: (connected) => {
+              if (!connected) {
+                // Stream disconnected — refresh stale data
+              }
+            },
+          },
+        ],
       }}
       fallback={<div>Loading…</div>}
     >
@@ -361,12 +373,12 @@ await sm.bootstrap();
 
 ### Reactivity
 
-**`objectPool.subscribe`** — fires when any model of a given type is added, updated, or removed:
+**`objectPool.subscribe`** — fires when models of a given type are added or removed from the pool:
 
 ```ts
 const unsubscribe = sm.objectPool.subscribe("Issue", () => {
   const issues = sm.objectPool.getAll("Issue");
-  // react to changes, write back
+  // react to structural changes (new/removed instances)
 });
 ```
 
@@ -391,6 +403,21 @@ issue.watch((m) => m.status === "done", (isDone) => { ... });
 ```
 
 Use `objectPool.subscribe` to react to new models arriving from the SSE stream. Use `watch` for field-level changes on a model you already hold.
+
+### Refreshing stale data
+
+When a secondary stream disconnects and reconnects, data may be stale. Three refresh APIs re-fetch from the server while preserving object identity (components holding references see updated values, not new objects):
+
+```ts
+// Re-fetch a specific collection
+await sm.refreshCollection("Activity", "taskId", "t1");
+
+// Re-fetch specific models by ID
+await sm.refreshModels("Activity", ["a1", "a2"]);
+
+// Re-fetch everything previously loaded for a model type
+await sm.refreshAllOfModel("Activity");
+```
 
 ### Execution environments
 

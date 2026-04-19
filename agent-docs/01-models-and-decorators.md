@@ -50,6 +50,8 @@ export class Issue extends BaseModel { ... }
 
 Registers the class with the registry. The `loadStrategy` controls when instances are loaded into memory — see `04-lazy-loading.md` for the full breakdown of strategies.
 
+Available strategies: `Instant`, `Lazy`, `Partial`, `ExplicitlyRequested`, and `Ephemeral`. `Ephemeral` models live only in the ObjectPool — they are never written to or read from IDB. They are typically updated via `ModelStream` (secondary SSE connections) and are useful for transient data like live metrics or computation results.
+
 `usedForPartialIndexes: true` means other models can use this model's ID fields as index keys in IndexedDB (used by `LazyReferenceCollection` queries).
 
 ### `@Property`

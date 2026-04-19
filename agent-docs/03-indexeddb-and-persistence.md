@@ -140,3 +140,4 @@ Once a transaction reaches `Completed` state (server acknowledged and delta rece
 | `lastSyncId` | No | Yes (in `__meta`) |
 | `subscribedSyncGroups` | No | Yes (in `__meta`) |
 | Ephemeral properties | Yes | No |
+| Ephemeral models (`LoadStrategy.Ephemeral`) | Yes (pool only) | Never — skipped entirely |

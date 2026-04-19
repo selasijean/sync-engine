@@ -178,6 +178,40 @@ Your change wins (last-writer-wins). The server's other field changes are preser
 
 See [06-transactions-and-undo.md](./06-transactions-and-undo.md) for the full rebase story.
 
+## ModelStream — Secondary SSE Connections
+
+`SyncConnection` handles the primary SSE stream from the main server. `ModelStream` (`core/ModelStream.ts`) provides secondary SSE connections for external services — calculation engines, analytics pipelines, or any service that pushes model updates.
+
+Key differences from `SyncConnection`:
+- **Update-only**: ModelStream only updates models already in the pool — it never inserts new ones. If a message arrives for a model not in the pool, it's ignored.
+- **No sync state**: No `lastSyncId`, no delta packets, no transaction resolution. Each message is a simple `{ modelName, modelId, data }` update.
+- **Ephemeral-aware**: For `Ephemeral` models, updates skip IDB entirely. For non-ephemeral models, updates are written to IDB.
+- **Lifecycle hooks**: `onStatusChange(connected: boolean)` fires on connect, disconnect, error, and reconnect — enabling consumers to trigger refresh APIs when a stream drops and comes back.
+
+Both `SyncConnection` and `ModelStream` extend `BaseSSEConnection`, which provides shared reconnect logic with a 3-second delay.
+
+### Configuration
+
+```typescript
+const sm = new StoreManager({
+  // ...
+  modelStreams: [
+    {
+      url: "http://calc-engine/events",
+      onStatusChange: (connected) => {
+        if (!connected) {
+          sm.refreshAllOfModel("Metric");
+        }
+      },
+    },
+  ],
+});
+```
+
+## Ephemeral Models in Delta Processing
+
+When `SyncConnection` processes a delta for an `Ephemeral` model, it skips IDB writes and deletes. The model is updated in the ObjectPool only. This also applies to cascade deletes — if a deleted model has ephemeral children via `@BackReference` or `@Reference({ onDelete: "cascade" })`, those children are removed from the pool without touching IDB.
+
 ## Sequence Diagram: Full Round-Trip
 
 ```

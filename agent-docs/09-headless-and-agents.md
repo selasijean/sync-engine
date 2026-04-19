@@ -12,8 +12,14 @@ Two constructor options make the engine portable:
 const sm = new StoreManager({
   workspaceId: "agent-1",
   bootstrapFetcher: ...,
-  storageAdapter: new MemoryAdapter(),         // replaces IndexedDB
+  storageAdapter: new MemoryAdapter(),             // replaces IndexedDB
   sseClientFactory: (url) => new EventSource(url), // replaces browser EventSource
+  modelStreams: [                                   // optional secondary SSE connections
+    {
+      url: "http://calc-engine/events",
+      onStatusChange: (connected) => { /* handle disconnect/reconnect */ },
+    },
+  ],
 });
 ```
 
@@ -75,7 +81,7 @@ React's observer model (`useSyncExternalStore`, `useEffect`) doesn't exist in No
 
 ### `objectPool.subscribe` — type-level reactivity
 
-Fires whenever any model of a given type is added, updated, or removed from the pool. This is the primary event loop for an agent reacting to SSE deltas:
+Fires whenever models of a given type are added or removed from the pool. This is the primary event loop for an agent reacting to new or deleted models from the SSE stream:
 
 ```typescript
 const unsubscribe = sm.objectPool.subscribe("Issue", () => {
@@ -87,6 +93,8 @@ unsubscribe(); // call on shutdown
 ```
 
 The SSE stream delivers a delta → pool updates → subscription fires → agent acts → write queued → server broadcasts → all clients and agents update. No polling.
+
+Note: `objectPool.subscribe` fires on structural changes (instances added/removed). For property-level changes on existing instances, use `model.watch()` below — in-place updates go through MobX observable boxes, not pool-level notifications.
 
 ### `collection.subscribe` — relationship-level reactivity
 
@@ -191,6 +199,60 @@ issue.save();
 ```
 
 The local update is visible instantly (before the server ACK). If the server rejects the write, the optimistic update is rolled back automatically.
+
+## ModelStream and Refresh APIs
+
+### Secondary SSE connections
+
+`ModelStream` connections are configured via the `modelStreams` option. They receive updates from external services (calculation engines, analytics, etc.) and apply them to existing pool models. They never insert new models — only update ones that are already loaded.
+
+```typescript
+const sm = new StoreManager({
+  // ...
+  modelStreams: [
+    {
+      url: "http://calc-engine/events",
+      onStatusChange: (connected) => {
+        if (!connected) {
+          console.log("Calc engine disconnected — data may be stale");
+        }
+      },
+    },
+  ],
+});
+```
+
+### Refreshing stale data
+
+When a secondary stream disconnects, models it was updating may become stale. Three refresh APIs re-fetch data from the server while preserving object identity — any agent or component holding a reference to a model instance continues to see the same object, just with updated values:
+
+```typescript
+// Re-fetch a specific collection (e.g., all metrics for a given label)
+const metrics = await sm.refreshCollection("Metric", "label", "cpu");
+
+// Re-fetch specific models by ID
+const models = await sm.refreshModels("Metric", ["m1", "m2"]);
+
+// Re-fetch everything previously loaded for a model type
+await sm.refreshAllOfModel("Metric");
+```
+
+All three methods:
+- Fetch fresh data directly from the server (via `onDemandFetcher` / `onDemandBatchFetcher`)
+- Update existing pool instances in-place (preserving object identity)
+- Remove models the server no longer returns (server-side deletions)
+- Skip IDB for ephemeral models
+- Update IDB for non-ephemeral models
+
+A typical pattern is to trigger a refresh from the `onStatusChange` callback when a stream reconnects, or proactively when it disconnects:
+
+```typescript
+onStatusChange: (connected) => {
+  if (!connected) {
+    sm.refreshAllOfModel("Metric");
+  }
+}
+```
 
 ## Teardown
 

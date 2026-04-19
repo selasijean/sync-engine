@@ -45,7 +45,9 @@ subscribe(modelName: string, listener: () => void): () => void
 notify(modelName: string): void
 ```
 
-Every `pool.put()` and `pool.remove()` calls `notify(modelName)`, which fires all subscribed listeners for that model type. The React hooks (`useModels`, `useModel`) subscribe to these notifications via `useSyncExternalStore`. When a delta arrives and updates a model, the pool notifies → React re-renders exactly the components that use that model type.
+`pool.put()` and `pool.remove()` call `notify(modelName)`, which fires all subscribed listeners for that model type. The React hooks (`useModels`, `useModel`) subscribe to these notifications via `useSyncExternalStore`.
+
+Note: `hydrateAndPut` is the primary method for adding or updating models. When updating an existing instance, it hydrates data in-place (updating MobX observable boxes directly) **without** calling `put`/`notify` — avoiding unnecessary pool-level notifications and snapshot cache invalidation. MobX handles property-level reactivity through the observable boxes. Pool-level `notify` only fires on structural changes (new instance added or instance removed).
 
 This is the mechanism that makes the UI feel live — components don't poll; they're subscribed.
 
@@ -98,10 +100,17 @@ Not all models live fully in the pool. The `LoadStrategy` on each model controls
 | `Lazy` | None | On first access via collection or explicit load |
 | `Partial` | Only referenced ones | When a parent model referencing them is loaded |
 | `ExplicitlyRequested` | None | Only when code calls `sm.loadOne(...)` |
+| `Ephemeral` | None | On demand via `loadCollection`/`loadByIds`; never persisted to IDB |
 
-`FullStore` (for Instant models) loads everything at bootstrap. `PartialStore` (for the rest) loads nothing — instances trickle in on demand and stay in the pool once loaded.
+`FullStore` (for Instant models) loads everything at bootstrap. `PartialStore` (for the rest) loads nothing — instances trickle in on demand and stay in the pool once loaded. `EphemeralStore` (for Ephemeral models) is a no-op — it skips both `loadFromDatabase` and `loadFromServer`, since ephemeral models are loaded on-demand and never touch IDB.
 
 This is the key mechanism for keeping the pool small. See `04-lazy-loading.md` for more detail.
+
+## In-Place Updates and Object Identity
+
+`hydrateAndPut` preserves object identity. When called with data for a model that already exists in the pool, it updates the existing instance in-place via `hydrate()` rather than creating a new one. This means components and hooks holding a reference to a model instance will see updated values without needing to re-resolve from the pool.
+
+This is critical for the refresh APIs (`refreshCollection`, `refreshModels`, `refreshAllOfModel`), which re-fetch data from the server without breaking existing references.
 
 ## Pool vs IndexedDB
 

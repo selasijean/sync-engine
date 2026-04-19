@@ -25,6 +25,13 @@ The engine is a publishable npm package at `packages/sync-engine`. All source fi
 │  HTTP POST to server│          │   server → applies    │
 │  Undo/redo stack    │          │   delta packets       │
 └──────┬──────────────┘          └────────────┬──────────┘
+                                              │
+                                 ┌────────────▼──────────┐
+                                 │   ModelStream(s)      │
+                                 │   Secondary SSE from  │
+                                 │   external services   │
+                                 │   (e.g. calc engines) │
+                                 └────────────┬──────────┘
        │                                      │
 ┌──────▼──────────────────────────────────────▼──────────┐
 │              StorageAdapter (pluggable)                  │
@@ -51,6 +58,9 @@ All files are under `packages/sync-engine/src/`.
 | `LazyCollection` types | `core/LazyCollection.ts` | Deferred one-to-many relationships; only load data when accessed |
 | `TransactionQueue` | `core/TransactionQueue.ts` | Batches user edits, sends to server, manages undo/redo |
 | `SyncConnection` | `core/SyncConnection.ts` | Listens to SSE stream; processes and applies delta packets; accepts custom `sseClientFactory` |
+| `BaseSSEConnection` | `core/BaseSSEConnection.ts` | Abstract base class for SSE connections with reconnect, lifecycle hooks (`onOpen`/`onClose`) |
+| `ModelStream` | `core/ModelStream.ts` | Secondary SSE connection for external services; updates existing pool models in-place, never inserts new ones |
+| `EphemeralStore` | `core/Store.ts` | No-op store for `Ephemeral` models — skips all IDB loading |
 | `StoreManager` | `core/StoreManager.ts` | Top-level orchestrator; wires everything together |
 | React hooks | `react/index.tsx` | `useModels`, `useModel`, `useCollection`, `useUndoRedo` |
 
@@ -89,7 +99,8 @@ bootstrap()
   │       Local   → offline, use cache only
   ├─ 4. Load data (two-phase: critical models first, deferred in background)
   ├─ 5. Open SSE connection (via sseClientFactory — browser EventSource or Node.js eventsource)
-  └─ 6. Signal Ready → UI renders / agent begins work
+  ├─ 6. Open ModelStream connections (if `modelStreams` configured)
+  └─ 7. Signal Ready → UI renders / agent begins work
 ```
 
 ## Environments
