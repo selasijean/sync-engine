@@ -214,6 +214,53 @@ describe("BaseModel", () => {
     });
   });
 
+  // ── assign ──────────────────────────────────────────────────────────────────
+
+  describe("assign()", () => {
+    it("bulk-assigns fields without saving", () => {
+      const task = new TestTask();
+      hydrateObservable(task, { id: "t", title: "Old", done: false });
+      task.assign({ title: "New", done: true });
+      expect(task.title).toBe("New");
+      expect(task.done).toBe(true);
+      expect(task.hasUnsavedChanges).toBe(true);
+    });
+
+    it("ignores non-property keys", () => {
+      const task = new TestTask();
+      hydrateObservable(task, { id: "t", title: "Old" });
+      task.assign({ id: "other", title: "New", bogus: 123 });
+      expect(task.id).toBe("t");
+      expect(task.title).toBe("New");
+    });
+
+    it("works with discardUnsavedChanges to revert", () => {
+      const task = new TestTask();
+      hydrateObservable(task, { id: "t", title: "Original", done: false });
+      task.assign({ title: "Draft", done: true });
+      task.discardUnsavedChanges();
+      expect(task.title).toBe("Original");
+      expect(task.done).toBe(false);
+      expect(task.hasUnsavedChanges).toBe(false);
+    });
+
+    it("works with save to commit", () => {
+      const commits: unknown[] = [];
+      BaseModel.storeManager = makeFakeStoreManager({
+        commitUpdate: (_id, _name, changes) => {
+          commits.push(changes);
+        },
+      });
+
+      const task = new TestTask();
+      hydrateObservable(task, { id: "t", title: "Old" });
+      task.assign({ title: "New" });
+      task.save();
+      expect(commits).toHaveLength(1);
+      expect(task.hasUnsavedChanges).toBe(false);
+    });
+  });
+
   // ── update ──────────────────────────────────────────────────────────────────
 
   describe("update()", () => {

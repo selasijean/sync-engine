@@ -37,7 +37,7 @@ import {
 } from "mobx";
 
 // The four PropertyTypes that have MobX boxes and direct setters — the "flat scalar" fields.
-// Used by makeModelObservable (to create boxes) and update() (to filter writable keys).
+// Used by makeModelObservable (to create boxes) and assign() (to filter writable keys).
 const FLAT_PROPERTY_TYPES = new Set([
   PropertyType.Property,
   PropertyType.EphemeralProperty,
@@ -362,39 +362,40 @@ export class BaseModel {
   }
 
   // ---------------------------------------------------------------------------
-  // Update — bulk field assignment + save
+  // Field assignment
   // ---------------------------------------------------------------------------
 
   /**
-   * Bulk-assign fields from a plain object, then save.
-   *
-   * Works for both new and existing pool models:
-   *   - New model (not yet saved): populates fields before the engine begins
-   *     tracking changes, then commits the create to the server.
-   *   - Existing pool model: assigns each field through the normal setter so
-   *     changes are tracked, then commits the update to the server.
+   * Bulk-assign fields from a plain object without saving.
+   * Changes are tracked in pendingChanges and can be committed
+   * with save() or reverted with discardUnsavedChanges().
    *
    * Only `@Property`, `@EphemeralProperty`, `@Reference` (ID fields), and
    * `@ReferenceArray` fields are written — relationship objects and internals
    * are ignored.
    */
+  assign(data: Record<string, unknown>) {
+    const meta = ModelRegistry.getMetaForInstance(this);
+    runInAction(() => {
+      for (const [key, value] of Object.entries(data)) {
+        if (key === "id") {
+          continue;
+        }
+        const propMeta = meta?.properties.get(key);
+        if (propMeta == null || !FLAT_PROPERTY_TYPES.has(propMeta.type)) {
+          continue;
+        }
+        (this as Record<string, unknown>)[key] = value;
+      }
+    });
+  }
+
+  /** Shorthand for assign() + save(). For new models, hydrates then saves. */
   update(data: Record<string, unknown>) {
     if (this.store === null) {
       this.hydrate(data);
     } else {
-      const meta = ModelRegistry.getMetaForInstance(this);
-      runInAction(() => {
-        for (const [key, value] of Object.entries(data)) {
-          if (key === "id") {
-            continue;
-          }
-          const propMeta = meta?.properties.get(key);
-          if (propMeta == null || !FLAT_PROPERTY_TYPES.has(propMeta.type)) {
-            continue;
-          }
-          (this as Record<string, unknown>)[key] = value;
-        }
-      });
+      this.assign(data);
     }
     this.save();
   }

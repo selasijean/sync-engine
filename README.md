@@ -149,10 +149,10 @@ batch(async () => {
 });
 
 // Preview / discard — edit locally without sending to the server
-issue.title = "Draft title";
+issue.assign({ title: "Draft", priority: 3 });
 issue.hasUnsavedChanges;        // true
-issue.discardUnsavedChanges();  // reverts to last-saved value
-issue.title;                    // "Old title"
+issue.discardUnsavedChanges();  // reverts to last-saved values
+// or: issue.save()             // commits to server
 
 const { undo, redo, canUndo, canRedo } = useUndoRedo();
 ```
