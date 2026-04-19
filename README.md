@@ -148,6 +148,12 @@ batch(async () => {
   comments.forEach(c => { c.text = "resolved"; c.save(); });
 });
 
+// Preview / discard — edit locally without sending to the server
+issue.title = "Draft title";
+issue.hasUnsavedChanges;        // true
+issue.discardUnsavedChanges();  // reverts to last-saved value
+issue.title;                    // "Old title"
+
 const { undo, redo, canUndo, canRedo } = useUndoRedo();
 ```
 

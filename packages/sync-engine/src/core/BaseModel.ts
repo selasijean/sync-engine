@@ -324,6 +324,29 @@ export class BaseModel {
   }
 
   /**
+   * Revert all unsaved property changes to their last-saved values.
+   * Mirror of save() — where save() commits forward, this rolls back.
+   */
+  discardUnsavedChanges() {
+    if (this.pendingChanges.size === 0) {
+      return;
+    }
+    const meta = ModelRegistry.getMetaForInstance(this);
+    const entries = Array.from(this.pendingChanges);
+    runInAction(() => {
+      for (const [propName, serializedOldValue] of entries) {
+        const propMeta = meta?.properties.get(propName);
+        const deserialized =
+          propMeta?.deserializer != null
+            ? propMeta.deserializer(serializedOldValue)
+            : serializedOldValue;
+        this.setQuiet(propName, deserialized);
+      }
+    });
+    this.pendingChanges.clear();
+  }
+
+  /**
    * React to property changes on this model without importing MobX.
    * Use on models obtained from the pool — `objectPool.getById` / `objectPool.getAll`.
    *

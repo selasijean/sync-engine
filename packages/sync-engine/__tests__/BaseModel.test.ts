@@ -157,6 +157,63 @@ describe("BaseModel", () => {
     });
   });
 
+  // ── discardUnsavedChanges ────────────────────────────────────────────────────
+
+  describe("discardUnsavedChanges()", () => {
+    it("reverts a changed property to its pre-edit value", () => {
+      const task = new TestTask();
+      task.hydrate({ id: "t", title: "Original" });
+      task.makeModelObservable();
+      task.title = "Edited";
+      expect(task.title).toBe("Edited");
+      task.discardUnsavedChanges();
+      expect(task.title).toBe("Original");
+      expect(task.hasUnsavedChanges).toBe(false);
+    });
+
+    it("reverts multiple changed properties", () => {
+      const task = new TestTask();
+      task.hydrate({ id: "t", title: "Original", done: false });
+      task.makeModelObservable();
+      task.title = "Edited";
+      task.done = true;
+      task.discardUnsavedChanges();
+      expect(task.title).toBe("Original");
+      expect(task.done).toBe(false);
+      expect(task.hasUnsavedChanges).toBe(false);
+    });
+
+    it("handles Date properties with serializer/deserializer", () => {
+      const original = new Date("2025-01-01T00:00:00.000Z");
+      const task = new TestTask();
+      task.hydrate({ id: "t", createdAt: original.toISOString() });
+      task.makeModelObservable();
+      task.createdAt = new Date("2099-12-31T00:00:00.000Z");
+      task.discardUnsavedChanges();
+      expect(task.createdAt.getTime()).toBe(original.getTime());
+    });
+
+    it("is a no-op when there are no unsaved changes", () => {
+      const task = new TestTask();
+      task.hydrate({ id: "t", title: "Same" });
+      task.makeModelObservable();
+      task.discardUnsavedChanges();
+      expect(task.title).toBe("Same");
+      expect(task.hasUnsavedChanges).toBe(false);
+    });
+
+    it("reverts to the first old value even after multiple edits", () => {
+      const task = new TestTask();
+      task.hydrate({ id: "t", title: "First" });
+      task.makeModelObservable();
+      task.title = "Second";
+      task.title = "Third";
+      task.discardUnsavedChanges();
+      expect(task.title).toBe("First");
+      expect(task.hasUnsavedChanges).toBe(false);
+    });
+  });
+
   // ── update ──────────────────────────────────────────────────────────────────
 
   describe("update()", () => {
