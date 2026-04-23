@@ -5,7 +5,11 @@ import { ObjectPool } from "@sync-engine/ObjectPool";
 import { TransactionQueue } from "@sync-engine/TransactionQueue";
 import { BaseModel } from "@sync-engine/BaseModel";
 import { TestTask, TestProject, TestNote, TestActivity } from "./fixtures";
-import type { DeltaPacket } from "@sync-engine/SyncConnection";
+import type {
+  DeltaPacket,
+  SyncMessageTransform,
+} from "@sync-engine/SyncConnection";
+import { controllableSSEClient, makeFactory, sendMessage } from "./helpers/sseClient";
 
 // We test processDeltaPacket directly (private) to avoid needing a real EventSource.
 const process = (conn: SyncConnection, packet: DeltaPacket) =>
@@ -501,6 +505,171 @@ describe("SyncConnection", () => {
       });
 
       expect(existing.text).toBe("updated");
+    });
+  });
+
+  // ── transform ─────────────────────────────────────────────────────────────
+
+  describe("transform", () => {
+    it("converts a non-canonical envelope into a SyncAction", async () => {
+      const transform: SyncMessageTransform = (raw) => {
+        const m = raw as {
+          sync_id: number;
+          type: string;
+          entity: string;
+          entity_id: string;
+          payload: Record<string, unknown>;
+        };
+        const action = m.type === "delete" ? "D" : "I";
+        return {
+          id: m.sync_id,
+          action,
+          modelName: m.entity,
+          modelId: m.entity_id,
+          data: m.payload,
+        };
+      };
+
+      const client = controllableSSEClient();
+      const c = new SyncConnection(
+        "http://localhost/events",
+        db,
+        pool,
+        queue,
+        undefined,
+        undefined,
+        undefined,
+        makeFactory(client),
+        transform,
+      );
+      c.connect();
+
+      sendMessage(client, {
+        sync_id: 5,
+        type: "insert",
+        entity: "TestTask",
+        entity_id: "t-transform",
+        payload: { title: "Transformed" },
+      });
+
+      await vi.waitFor(() => {
+        expect(
+          (pool.getById("TestTask", "t-transform") as TestTask)?.title,
+        ).toBe("Transformed");
+      });
+
+      c.disconnect();
+    });
+
+    it("accepts an array of SyncActions", async () => {
+      const transform: SyncMessageTransform = (raw) => {
+        const items = raw as Array<{
+          sync_id: number;
+          entity_id: string;
+          title: string;
+        }>;
+        return items.map((m) => ({
+          id: m.sync_id,
+          action: "I" as const,
+          modelName: "TestTask",
+          modelId: m.entity_id,
+          data: { title: m.title },
+        }));
+      };
+
+      const client = controllableSSEClient();
+      const c = new SyncConnection(
+        "http://localhost/events",
+        db,
+        pool,
+        queue,
+        undefined,
+        undefined,
+        undefined,
+        makeFactory(client),
+        transform,
+      );
+      c.connect();
+
+      sendMessage(client, [
+        { sync_id: 1, entity_id: "ta", title: "A" },
+        { sync_id: 2, entity_id: "tb", title: "B" },
+      ]);
+
+      await vi.waitFor(() => {
+        expect(pool.getById("TestTask", "ta")).toBeDefined();
+        expect(pool.getById("TestTask", "tb")).toBeDefined();
+      });
+
+      c.disconnect();
+    });
+
+    it("accepts a DeltaPacket envelope", async () => {
+      const transform: SyncMessageTransform = (raw) => raw as DeltaPacket;
+
+      const client = controllableSSEClient();
+      const c = new SyncConnection(
+        "http://localhost/events",
+        db,
+        pool,
+        queue,
+        undefined,
+        undefined,
+        undefined,
+        makeFactory(client),
+        transform,
+      );
+      c.connect();
+
+      const packet: DeltaPacket = {
+        syncActions: [
+          {
+            id: 9,
+            action: "I",
+            modelName: "TestTask",
+            modelId: "t-packet",
+            data: { title: "Packet" },
+          },
+        ],
+      };
+      sendMessage(client, packet);
+
+      await vi.waitFor(() => {
+        expect(pool.getById("TestTask", "t-packet")).toBeDefined();
+      });
+
+      c.disconnect();
+    });
+
+    it("drops the message when the transform returns null", async () => {
+      const transform: SyncMessageTransform = () => null;
+
+      const client = controllableSSEClient();
+      const c = new SyncConnection(
+        "http://localhost/events",
+        db,
+        pool,
+        queue,
+        undefined,
+        undefined,
+        undefined,
+        makeFactory(client),
+        transform,
+      );
+      c.connect();
+
+      sendMessage(client, {
+        id: 1,
+        action: "I",
+        modelName: "TestTask",
+        modelId: "t-dropped",
+        data: { title: "nope" },
+      });
+
+      await new Promise((r) => setTimeout(r, 10));
+      expect(pool.getById("TestTask", "t-dropped")).toBeUndefined();
+
+      c.disconnect();
     });
   });
 

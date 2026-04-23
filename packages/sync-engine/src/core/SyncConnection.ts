@@ -55,6 +55,14 @@ export type SyncGroupChangeHandler = (
   removedGroups: string[],
 ) => Promise<void>;
 
+/**
+ * Return null to drop the message. When not provided, raw payloads are
+ * assumed to already match `SyncAction`.
+ */
+export type SyncMessageTransform = (
+  raw: unknown,
+) => SyncAction | SyncAction[] | DeltaPacket | null | undefined;
+
 export class SyncConnection extends BaseSSEConnection {
   // Serializes packet processing to prevent interleaved async mutations.
   private packetQueue: DeltaPacket[] = [];
@@ -73,6 +81,7 @@ export class SyncConnection extends BaseSSEConnection {
       value: string,
     ) => boolean,
     sseClientFactory?: SSEClientFactory,
+    private transform?: SyncMessageTransform,
   ) {
     super(url, sseClientFactory);
   }
@@ -85,8 +94,19 @@ export class SyncConnection extends BaseSSEConnection {
   }
 
   protected onMessage(data: string): void {
-    const action = JSON.parse(data);
-    this.enqueuePacket({ syncActions: [action] });
+    const raw = JSON.parse(data);
+    const transformed =
+      this.transform != null ? this.transform(raw) : (raw as SyncAction);
+    if (transformed == null) {
+      return;
+    }
+    if (Array.isArray(transformed)) {
+      this.enqueuePacket({ syncActions: transformed });
+    } else if (Array.isArray((transformed as DeltaPacket).syncActions)) {
+      this.enqueuePacket(transformed as DeltaPacket);
+    } else {
+      this.enqueuePacket({ syncActions: [transformed as SyncAction] });
+    }
   }
 
   protected onReconnect(): void {

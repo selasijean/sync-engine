@@ -52,4 +52,13 @@ export type { TransactionSender, BatchResponse } from "./TransactionQueue";
 
 // Sync
 export { SyncConnection } from "./SyncConnection";
-export type { SyncAction, DeltaPacket } from "./SyncConnection";
+export type {
+  SyncAction,
+  DeltaPacket,
+  SyncMessageTransform,
+} from "./SyncConnection";
+export { ModelStream } from "./ModelStream";
+export type {
+  ModelUpdate,
+  ModelStreamMessageTransform,
+} from "./ModelStream";

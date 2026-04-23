@@ -38,8 +38,9 @@ import {
   SyncConnection,
   type DeltaPacket,
   type SSEClientFactory,
+  type SyncMessageTransform,
 } from "./SyncConnection";
-import { ModelStream } from "./ModelStream";
+import { ModelStream, type ModelStreamMessageTransform } from "./ModelStream";
 import { BaseModel } from "./BaseModel";
 import {
   BootstrapPhase,
@@ -118,6 +119,11 @@ export type SyncGroupFetcher = (
 export interface ModelStreamConfig {
   url: string;
   onStatusChange?: (connected: boolean) => void;
+  /**
+   * Use when the backend sends a different envelope than the engine's
+   * canonical `{ modelName, modelId, data }`.
+   */
+  transform?: ModelStreamMessageTransform;
 }
 
 export interface StoreManagerConfig {
@@ -138,6 +144,13 @@ export interface StoreManagerConfig {
    *   sseClientFactory: (url) => new EventSource(url)
    */
   sseClientFactory?: SSEClientFactory;
+
+  /**
+   * Use when the backend sends a different envelope than the engine's
+   * canonical `{ id, modelName, modelId, action, data }`. Emit a
+   * `DeltaPacket` to carry sync-group changes alongside actions.
+   */
+  syncTransform?: SyncMessageTransform;
 
   /**
    * Custom storage backend. Defaults to IndexedDB (`Database`).
@@ -306,6 +319,7 @@ export class StoreManager {
             : undefined,
           this.isCollectionLoaded.bind(this),
           this.config.sseClientFactory,
+          this.config.syncTransform,
         );
         this.syncConnection.connect();
       }
@@ -316,6 +330,7 @@ export class StoreManager {
           this.objectPool,
           streamConfig.onStatusChange,
           this.config.sseClientFactory,
+          streamConfig.transform,
         );
         stream.connect();
         this.modelStreams.push(stream);

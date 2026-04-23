@@ -10,11 +10,19 @@ import { ModelRegistry } from "./ModelRegistry";
 import { BaseSSEConnection, type SSEClientFactory } from "./BaseSSEConnection";
 import { LoadStrategy } from "./types";
 
-interface ModelUpdate {
+export interface ModelUpdate {
   modelName: string;
   modelId: string;
   data: Record<string, unknown>;
 }
+
+/**
+ * Return null to drop the message. When not provided, raw payloads are
+ * assumed to already match `ModelUpdate`.
+ */
+export type ModelStreamMessageTransform = (
+  raw: unknown,
+) => ModelUpdate | ModelUpdate[] | null | undefined;
 
 export class ModelStream extends BaseSSEConnection {
   private updateQueue: ModelUpdate[] = [];
@@ -26,6 +34,7 @@ export class ModelStream extends BaseSSEConnection {
     private pool: ObjectPool,
     private onStatusChange?: (connected: boolean) => void,
     sseClientFactory?: SSEClientFactory,
+    private transform?: ModelStreamMessageTransform,
   ) {
     super(url, sseClientFactory);
   }
@@ -45,12 +54,17 @@ export class ModelStream extends BaseSSEConnection {
   }
 
   protected onMessage(data: string): void {
-    const update = JSON.parse(data) as ModelUpdate;
-    this.enqueue(update);
+    const raw = JSON.parse(data);
+    const transformed =
+      this.transform != null ? this.transform(raw) : (raw as ModelUpdate);
+    if (transformed == null) {
+      return;
+    }
+    this.enqueue(Array.isArray(transformed) ? transformed : [transformed]);
   }
 
-  private async enqueue(update: ModelUpdate) {
-    this.updateQueue.push(update);
+  private async enqueue(updates: ModelUpdate[]) {
+    this.updateQueue.push(...updates);
     if (this.processing) {
       return;
     }

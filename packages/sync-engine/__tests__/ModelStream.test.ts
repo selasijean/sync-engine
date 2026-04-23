@@ -1,33 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { ModelStream } from "@sync-engine/ModelStream";
+import type { ModelStreamMessageTransform } from "@sync-engine/ModelStream";
 import { ObjectPool } from "@sync-engine/ObjectPool";
 import { MemoryAdapter } from "@sync-engine/MemoryAdapter";
 import { BaseModel } from "@sync-engine/BaseModel";
 import type { SSEClient, SSEClientFactory } from "@sync-engine/SyncConnection";
 import { TestTask, TestMetric } from "./fixtures";
-
-// ── helpers ──────────────────────────────────────────────────────────────────
-
-/** An SSEClient whose onmessage/onerror can be triggered manually. */
-function controllableSSEClient(): SSEClient & { triggerError: () => void } {
-  const client: SSEClient & { triggerError: () => void } = {
-    onmessage: null,
-    onerror: null,
-    close: vi.fn(),
-    triggerError() {
-      this.onerror?.(new Event("error"));
-    },
-  };
-  return client;
-}
-
-function makeFactory(client: SSEClient): SSEClientFactory {
-  return () => client;
-}
-
-function sendMessage(client: SSEClient, payload: unknown) {
-  client.onmessage?.({ data: JSON.stringify(payload) } as MessageEvent);
-}
+import {
+  controllableSSEClient,
+  makeFactory,
+  sendMessage,
+} from "./helpers/sseClient";
 
 // ── setup ────────────────────────────────────────────────────────────────────
 
@@ -328,6 +311,125 @@ describe("ModelStream", () => {
 
       stream.disconnect();
       vi.useRealTimers();
+    });
+  });
+
+  describe("transform", () => {
+    it("converts a non-canonical envelope into a ModelUpdate", async () => {
+      const task = new TestTask();
+      task.hydrate({ id: "t1", title: "Original" });
+      task.makeModelObservable();
+      pool.put("TestTask", task);
+
+      const transform: ModelStreamMessageTransform = (raw) => {
+        const m = raw as { entity: string; id: string; fields: Record<string, unknown> };
+        return { modelName: m.entity, modelId: m.id, data: m.fields };
+      };
+
+      const client = controllableSSEClient();
+      const stream = new ModelStream(
+        "http://calc/events",
+        adapter,
+        pool,
+        undefined,
+        makeFactory(client),
+        transform,
+      );
+      stream.connect();
+
+      sendMessage(client, {
+        entity: "TestTask",
+        id: "t1",
+        fields: { title: "Transformed" },
+      });
+
+      await vi.waitFor(() => {
+        expect((pool.getById("TestTask", "t1") as TestTask).title).toBe(
+          "Transformed",
+        );
+      });
+
+      stream.disconnect();
+    });
+
+    it("accepts an array of ModelUpdates", async () => {
+      const t1 = new TestTask();
+      t1.hydrate({ id: "t1", title: "One" });
+      t1.makeModelObservable();
+      pool.put("TestTask", t1);
+      const t2 = new TestTask();
+      t2.hydrate({ id: "t2", title: "Two" });
+      t2.makeModelObservable();
+      pool.put("TestTask", t2);
+
+      const transform: ModelStreamMessageTransform = (raw) => {
+        const items = raw as Array<{ id: string; title: string }>;
+        return items.map((m) => ({
+          modelName: "TestTask",
+          modelId: m.id,
+          data: { title: m.title },
+        }));
+      };
+
+      const client = controllableSSEClient();
+      const stream = new ModelStream(
+        "http://calc/events",
+        adapter,
+        pool,
+        undefined,
+        makeFactory(client),
+        transform,
+      );
+      stream.connect();
+
+      sendMessage(client, [
+        { id: "t1", title: "OneUpdated" },
+        { id: "t2", title: "TwoUpdated" },
+      ]);
+
+      await vi.waitFor(() => {
+        expect((pool.getById("TestTask", "t1") as TestTask).title).toBe(
+          "OneUpdated",
+        );
+        expect((pool.getById("TestTask", "t2") as TestTask).title).toBe(
+          "TwoUpdated",
+        );
+      });
+
+      stream.disconnect();
+    });
+
+    it("drops the message when the transform returns null", async () => {
+      const task = new TestTask();
+      task.hydrate({ id: "t1", title: "Untouched" });
+      task.makeModelObservable();
+      pool.put("TestTask", task);
+
+      const transform: ModelStreamMessageTransform = () => null;
+
+      const client = controllableSSEClient();
+      const stream = new ModelStream(
+        "http://calc/events",
+        adapter,
+        pool,
+        undefined,
+        makeFactory(client),
+        transform,
+      );
+      stream.connect();
+
+      sendMessage(client, {
+        modelName: "TestTask",
+        modelId: "t1",
+        data: { title: "Should Not Apply" },
+      });
+
+      await new Promise((r) => setTimeout(r, 10));
+      expect((pool.getById("TestTask", "t1") as TestTask).title).toBe(
+        "Untouched",
+      );
+
+      stream.disconnect();
     });
   });
 
