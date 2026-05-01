@@ -1158,6 +1158,71 @@ describe("StoreManager", () => {
     });
   });
 
+  // ── fullBootstrap — onDemandFetcher narrows the fetch ─────────────────────
+  //
+  // When onDemandFetcher is configured the user has opted into progressive
+  // loading: Partial / Lazy / ExplicitlyRequested models load on access, not
+  // at bootstrap. Verify the engine narrows the bootstrap fetch accordingly
+  // so the server can omit those payloads.
+
+  describe("fullBootstrap() — onDemandFetcher narrowing", () => {
+    it("excludes Partial/Lazy/ExplicitlyRequested from onlyModels when onDemandFetcher is set", async () => {
+      const bootstrapFetcher = vi.fn().mockResolvedValue(emptyBootstrapResponse);
+      const sm = new StoreManager({
+        workspaceId: crypto.randomUUID(),
+        bootstrapFetcher,
+        onDemandFetcher: vi.fn().mockResolvedValue([]),
+      });
+
+      await sm.bootstrap();
+
+      expect(bootstrapFetcher).toHaveBeenCalledTimes(1);
+      const [, options] = bootstrapFetcher.mock.calls[0];
+      expect(options.onlyModels).toBeDefined();
+      // TestActivity is the only Partial fixture; everything else is Instant/Ephemeral.
+      expect(options.onlyModels).not.toContain("TestActivity");
+      expect(options.onlyModels).toContain("TestTask");
+
+      await sm.teardown();
+    });
+
+    it("omits onlyModels entirely when onDemandFetcher is not set (single-phase)", async () => {
+      const bootstrapFetcher = vi.fn().mockResolvedValue(emptyBootstrapResponse);
+      const sm = new StoreManager({
+        workspaceId: crypto.randomUUID(),
+        bootstrapFetcher,
+      });
+
+      await sm.bootstrap();
+
+      const [, options] = bootstrapFetcher.mock.calls[0];
+      expect(options.onlyModels).toBeUndefined();
+
+      await sm.teardown();
+    });
+
+    it("excludes both deferred AND on-demand strategies from phase 1 when both are set", async () => {
+      const bootstrapFetcher = vi.fn().mockResolvedValue(emptyBootstrapResponse);
+      const sm = new StoreManager({
+        workspaceId: crypto.randomUUID(),
+        bootstrapFetcher,
+        onDemandFetcher: vi.fn().mockResolvedValue([]),
+        // deferredModels is the user's explicit phase-2 list — its members
+        // should still be excluded from phase 1 even if they're Instant.
+        deferredModels: ["TestNote"],
+      });
+
+      await sm.bootstrap();
+
+      const [, options] = bootstrapFetcher.mock.calls[0];
+      expect(options.onlyModels).not.toContain("TestNote"); // deferred
+      expect(options.onlyModels).not.toContain("TestActivity"); // Partial
+      expect(options.onlyModels).toContain("TestTask"); // Instant, not deferred
+
+      await sm.teardown();
+    });
+  });
+
   // ── teardown / bootstrap race ─────────────────────────────────────────────
   //
   // Guards against the StrictMode-style remount where bootstrap() is in flight

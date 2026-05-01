@@ -46,6 +46,7 @@ import {
   BootstrapPhase,
   LoadStrategy,
   PropertyType,
+  type ModelMeta,
   type PropertyChange,
 } from "./types";
 
@@ -373,11 +374,22 @@ export class StoreManager {
    */
   private async fullBootstrap() {
     const deferred = new Set(this.config.deferredModels ?? []);
-    const allModelNames = ModelRegistry.allModels().map((m) => m.name);
+    const allMetas = ModelRegistry.allModels();
+
+    // When onDemandFetcher is configured, Partial / Lazy / ExplicitlyRequested
+    // models are loaded as accessed, so don't waste bootstrap payload on them.
+    const isOnDemand = this.config.onDemandFetcher != null;
+    const skipAtBootstrap = (m: ModelMeta) =>
+      isOnDemand &&
+      (m.loadStrategy === LoadStrategy.Partial ||
+        m.loadStrategy === LoadStrategy.Lazy ||
+        m.loadStrategy === LoadStrategy.ExplicitlyRequested);
 
     if (deferred.size > 0) {
       // Phase 1: critical models only
-      const criticalModels = allModelNames.filter((n) => !deferred.has(n));
+      const criticalModels = allMetas
+        .filter((m) => !deferred.has(m.name) && !skipAtBootstrap(m))
+        .map((m) => m.name);
       this.setPhase(
         BootstrapPhase.Fetching,
         `phase 1: ${criticalModels.length} critical models`,
@@ -409,14 +421,21 @@ export class StoreManager {
 
       // Phase 2: deferred models — runs AFTER bootstrap() returns and the
       // engine is marked ready. The UI is already interactive at this point.
-      const deferredModels = allModelNames.filter((n) => deferred.has(n));
+      const deferredModels = allMetas
+        .filter((m) => deferred.has(m.name))
+        .map((m) => m.name);
       if (deferredModels.length > 0) {
         this.fetchDeferredModels(deferredModels);
       }
     } else {
-      // Single-phase: fetch everything at once
+      // Single-phase: fetch everything at once.
+      // When onDemandFetcher is configured, narrow to fetchable models so the
+      // server can omit Partial / Lazy / ExplicitlyRequested data.
       this.setPhase(BootstrapPhase.Fetching, "full");
       const res = await this.config.bootstrapFetcher(BootstrapType.Full, {
+        onlyModels: isOnDemand
+          ? allMetas.filter((m) => !skipAtBootstrap(m)).map((m) => m.name)
+          : undefined,
         currentMeta: this.database.currentMeta,
       });
 
@@ -839,7 +858,10 @@ export class StoreManager {
    */
   async activateSyncGroup(
     groupId: string | string[],
-    { fetch = true, ephemeral = false }: { fetch?: boolean; ephemeral?: boolean } = {},
+    {
+      fetch = true,
+      ephemeral = false,
+    }: { fetch?: boolean; ephemeral?: boolean } = {},
   ): Promise<void> {
     const dbMeta = this.database.currentMeta;
     if (dbMeta == null) {
