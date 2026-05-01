@@ -224,6 +224,7 @@ export class StoreManager {
   private config: StoreManagerConfig;
   private _phase = BootstrapPhase.Idle;
   private _error: Error | null = null;
+  private stopped = false;
 
   /**
    * Tracks collections that have been loaded into the pool this session.
@@ -294,9 +295,15 @@ export class StoreManager {
 
       this.setPhase(BootstrapPhase.ConnectingDatabase);
       await this.database.connect();
+      if (this.stopped) {
+        return;
+      }
 
       this.setPhase(BootstrapPhase.DeterminingBootstrapType);
       const type = await this.database.determineBootstrapType();
+      if (this.stopped) {
+        return;
+      }
 
       if (type === BootstrapType.Full) {
         await this.fullBootstrap();
@@ -304,6 +311,9 @@ export class StoreManager {
         await this.partialBootstrap();
       } else {
         await this.localBootstrap();
+      }
+      if (this.stopped) {
+        return;
       }
 
       this.setPhase(BootstrapPhase.ConnectingSync);
@@ -336,6 +346,9 @@ export class StoreManager {
         this.modelStreams.push(stream);
       }
       await this.transactionQueue.resendCached();
+      if (this.stopped) {
+        return;
+      }
 
       this.setPhase(BootstrapPhase.Ready);
       this.config.onReady?.();
@@ -1383,8 +1396,10 @@ export class StoreManager {
   }
 
   async teardown() {
+    this.stopped = true;
     BaseModel.storeManager = null;
     this.syncConnection?.disconnect();
+    this.syncConnection = null;
     for (const stream of this.modelStreams) {
       stream.disconnect();
     }

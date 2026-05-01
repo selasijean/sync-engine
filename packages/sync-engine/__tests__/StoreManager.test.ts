@@ -7,7 +7,12 @@ import {
   vi,
   type MockedFunction,
 } from "vitest";
-import { StoreManager, RestrictDeleteError } from "@sync-engine/StoreManager";
+import {
+  StoreManager,
+  RestrictDeleteError,
+  type BootstrapResponse,
+} from "@sync-engine/StoreManager";
+import { BootstrapPhase } from "@sync-engine/types";
 import {
   TestTask,
   TestProject,
@@ -17,6 +22,13 @@ import {
   TestMetric,
   addToPool,
 } from "./fixtures";
+import { controllableSSEClient, makeFactory } from "./helpers/sseClient";
+
+const emptyBootstrapResponse: BootstrapResponse = {
+  lastSyncId: 0,
+  subscribedSyncGroups: [],
+  models: {},
+};
 
 let manager: StoreManager;
 
@@ -1143,6 +1155,112 @@ describe("StoreManager", () => {
 
       expect(sm.objectPool.getAll("TestActivity")).toHaveLength(1);
       expect(sm.objectPool.getById("TestActivity", "a2")).toBeUndefined();
+    });
+  });
+
+  // ── teardown / bootstrap race ─────────────────────────────────────────────
+  //
+  // Guards against the StrictMode-style remount where bootstrap() is in flight
+  // when teardown() fires. Without the stopped flag, bootstrap could keep
+  // walking past the await boundaries and open a SyncConnection no one will
+  // ever close.
+
+  describe("teardown / bootstrap race", () => {
+    it("teardown before SSE connect doesn't open an EventSource", async () => {
+      const client = controllableSSEClient();
+      const factory = vi.fn(makeFactory(client));
+      let resolveFetcher!: (v: BootstrapResponse) => void;
+      let phase: BootstrapPhase = BootstrapPhase.Idle;
+
+      const sm = new StoreManager({
+        workspaceId: crypto.randomUUID(),
+        bootstrapFetcher: () =>
+          new Promise<BootstrapResponse>((r) => {
+            resolveFetcher = r;
+          }),
+        syncUrl: "http://localhost/sync",
+        sseClientFactory: factory,
+        onPhaseChange: (p) => {
+          phase = p;
+        },
+      });
+
+      const bootP = sm.bootstrap();
+      bootP.catch(() => {});
+
+      // Wait until bootstrap is suspended at the fetcher boundary —
+      // i.e. past database.connect() and determineBootstrapType() but
+      // before SyncConnection construction.
+      await vi.waitFor(() => expect(phase).toBe(BootstrapPhase.Fetching));
+
+      await sm.teardown();
+
+      // Fetcher resolves AFTER teardown — bootstrap resumes and the stopped
+      // check should short-circuit before reaching ConnectingSync.
+      resolveFetcher(emptyBootstrapResponse);
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(factory).not.toHaveBeenCalled();
+    });
+
+    it("teardown after SSE connect closes the EventSource exactly once", async () => {
+      const client = controllableSSEClient();
+      const factory = vi.fn(makeFactory(client));
+
+      const sm = new StoreManager({
+        workspaceId: crypto.randomUUID(),
+        bootstrapFetcher: vi.fn().mockResolvedValue(emptyBootstrapResponse),
+        syncUrl: "http://localhost/sync",
+        sseClientFactory: factory,
+      });
+
+      await sm.bootstrap();
+      expect(factory).toHaveBeenCalledTimes(1);
+      expect(client.close).not.toHaveBeenCalled();
+
+      await sm.teardown();
+      expect(client.close).toHaveBeenCalledTimes(1);
+    });
+
+    it("bootstrap → teardown → new bootstrap opens exactly one EventSource", async () => {
+      // Simulates React 18 StrictMode: mount → cleanup → mount.
+      const client = controllableSSEClient();
+      const factory = vi.fn(makeFactory(client));
+      const workspaceId = crypto.randomUUID();
+
+      let resolveFirst!: (v: BootstrapResponse) => void;
+      let phase1: BootstrapPhase = BootstrapPhase.Idle;
+      const sm1 = new StoreManager({
+        workspaceId,
+        bootstrapFetcher: () =>
+          new Promise<BootstrapResponse>((r) => {
+            resolveFirst = r;
+          }),
+        syncUrl: "http://localhost/sync",
+        sseClientFactory: factory,
+        onPhaseChange: (p) => {
+          phase1 = p;
+        },
+      });
+
+      const bootP1 = sm1.bootstrap();
+      bootP1.catch(() => {});
+      await vi.waitFor(() => expect(phase1).toBe(BootstrapPhase.Fetching));
+      await sm1.teardown();
+      resolveFirst(emptyBootstrapResponse);
+      await new Promise((r) => setTimeout(r, 0));
+
+      const sm2 = new StoreManager({
+        workspaceId,
+        bootstrapFetcher: vi.fn().mockResolvedValue(emptyBootstrapResponse),
+        syncUrl: "http://localhost/sync",
+        sseClientFactory: factory,
+      });
+      await sm2.bootstrap();
+
+      expect(factory).toHaveBeenCalledTimes(1);
+
+      await sm2.teardown();
     });
   });
 });
