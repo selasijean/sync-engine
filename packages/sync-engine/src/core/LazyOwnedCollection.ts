@@ -51,11 +51,7 @@ export class LazyOwnedCollection<
       .filter((m): m is T => m != null);
   }
 
-  async load(): Promise<T[]> {
-    if (this.state === CollectionState.Loading) {
-      return this.items;
-    }
-
+  protected async runLoad(): Promise<T[]> {
     runInAction(() => {
       this.state = CollectionState.Loading;
       this.error = null;

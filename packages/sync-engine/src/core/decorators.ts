@@ -76,7 +76,6 @@ export function ClientModel(
 
 export function Property(
   opts: {
-    lazy?: boolean;
     indexed?: boolean;
     // Legacy decorator target — no better type exists for prototype manipulation
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -92,7 +91,6 @@ export function Property(
     ModelRegistry.registerProperty(target.constructor.name, {
       name: key,
       type: PropertyType.Property,
-      lazy: opts.lazy,
       indexed: opts.indexed,
       serializer: opts.serializer,
       deserializer: opts.deserializer,
@@ -128,12 +126,18 @@ export function EphemeralProperty() {
 //
 // @Reference then:
 //   1. Promotes `teamId` from PropertyType.Property → PropertyType.Reference,
-//      merging in referenceTo / onDelete / nullable.
+//      merging in referenceTo / onDelete / nullable / lazy.
 //   2. Registers `team` as a virtual PropertyType.ReferenceModel (not persisted).
 //   3. Defines a getter/setter that links `team` ↔ `teamId`.
 //
 // The ID field name defaults to `${key}Id` but can be overridden with idField:
 //   @Reference("Team", { idField: "parentTeamId" }) declare team: Team;
+//
+// `lazy` (default: true)
+//   true  — accessing `.team` returns whatever is in the pool right now (or null).
+//   false — eagerly pulls the referenced model into the pool inside
+//           makeModelObservable, so the accessor doesn't return null on first
+//           read after parent hydration.
 // ---------------------------------------------------------------------------
 
 export function Reference(
@@ -159,6 +163,7 @@ export function Reference(
       referenceTo,
       nullable: opts.nullable,
       onDelete: opts.onDelete,
+      lazy: opts.lazy,
     });
 
     // 2. Register the virtual model accessor (NOT persisted)
@@ -203,6 +208,13 @@ export function Reference(
 //   const items = issues.resolveFromPool(pool); // sync, from memory
 //   await issues.load();                 // async, from IDB
 //   issues.items;                        // the loaded models
+//
+// `lazy` (default: true)
+//   true  — collection stays Idle until something calls .load() / .resolveFromPool().
+//   false — eagerly loaded inside makeModelObservable() right after the parent
+//           is hydrated. Recursion is automatic: each child loaded into the pool
+//           runs its own makeModelObservable, so non-lazy collections nested
+//           further down the tree are also eagerly loaded.
 // ---------------------------------------------------------------------------
 
 export function ReferenceCollection(
@@ -308,6 +320,12 @@ export function ReferenceArray(referenceTo: string) {
 //
 //   @OwnedCollection("Issue", { idsField: "issueIds" })
 //   public issues: LazyOwnedCollection<Issue>;
+//
+// `lazy` (default: true)
+//   true  — collection stays Idle until something calls .load() / .resolveFromPool().
+//   false — eagerly loaded inside makeModelObservable() right after the parent
+//           is hydrated. Recursion is automatic (each loaded child runs its own
+//           makeModelObservable, firing any non-lazy collections it declares).
 // ---------------------------------------------------------------------------
 
 export function OwnedCollection(

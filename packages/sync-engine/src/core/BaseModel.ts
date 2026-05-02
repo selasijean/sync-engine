@@ -126,6 +126,12 @@ export class BaseModel {
   // ---------------------------------------------------------------------------
 
   makeModelObservable() {
+    // Idempotent: re-running would replace the LazyReferenceCollection /
+    // LazyBackReference / LazyOwnedCollection runtime objects, dropping
+    // their loaded items, and re-fire any non-lazy eager loads.
+    if (this.__observabilityEnabled) {
+      return;
+    }
     this.__observabilityEnabled = true;
     const meta = ModelRegistry.getMetaForInstance(this);
     if (meta == null) {
@@ -165,6 +171,19 @@ export class BaseModel {
               (this as Record<string, unknown>)[`__raw_${name}`] = currentValue;
             }
           }
+
+          if (
+            prop.type === PropertyType.Reference &&
+            prop.lazy === false &&
+            BaseModel.storeManager != null &&
+            typeof currentValue === "string" &&
+            currentValue !== ""
+          ) {
+            void BaseModel.storeManager.loadOne(
+              prop.referenceTo!,
+              currentValue,
+            );
+          }
           break;
         }
 
@@ -196,6 +215,10 @@ export class BaseModel {
           }
 
           this.__collections[name] = collection;
+
+          if (prop.lazy === false && BaseModel.storeManager != null) {
+            void collection.load();
+          }
           break;
         }
 
@@ -218,6 +241,10 @@ export class BaseModel {
           }
 
           this.__collections[name] = collection;
+
+          if (prop.lazy === false && BaseModel.storeManager != null) {
+            void collection.load();
+          }
           break;
         }
 

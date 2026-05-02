@@ -23,10 +23,12 @@ import {
   Property,
   Reference,
   ReferenceCollection,
+  OwnedCollection,
   BackReference,
 } from "@sync-engine/decorators";
 import { LoadStrategy } from "@sync-engine/types";
 import type { LazyReferenceCollection } from "@sync-engine/LazyCollection";
+import type { LazyOwnedCollection } from "@sync-engine/LazyOwnedCollection";
 const dateSerializer = (v: Date) => (v instanceof Date ? v.toISOString() : v);
 const dateDeserializer = (v: unknown) => new Date(v as string);
 import type { StoreManager } from "@sync-engine/StoreManager";
@@ -83,6 +85,7 @@ export function makeFakeStoreManager(
     commitUpdate: overrides.commitUpdate ?? (() => {}),
     loadCollection: async () => [],
     loadByIds: async () => [],
+    loadOne: async () => null,
   } as unknown as StoreManager;
 }
 
@@ -228,6 +231,72 @@ export class TestMetric extends BaseModel {
 
   @Property()
   public label = "";
+}
+
+// ── Eager hydration fixtures ──────────────────────────────────────────────────
+//
+// TestEagerOwner ──< TestEagerChild ──< TestEagerLeaf
+// Both ReferenceCollections are non-lazy (lazy: false) so when an Owner is
+// hydrated, its children load eagerly, and each child's leaves also load —
+// exercising recursive eager hydration through makeModelObservable.
+
+@ClientModel({ loadStrategy: LoadStrategy.Instant })
+export class TestEagerLeaf extends BaseModel {
+  @Property()
+  public label = "";
+
+  @Property({ indexed: true })
+  public childId = "";
+}
+
+@ClientModel({ loadStrategy: LoadStrategy.Instant })
+export class TestEagerChild extends BaseModel {
+  @Property()
+  public name = "";
+
+  @Property({ indexed: true })
+  public ownerId = "";
+
+  @ReferenceCollection("TestEagerLeaf", {
+    inverseOf: "childId",
+    lazy: false,
+  })
+  public leaves: LazyReferenceCollection<TestEagerLeaf>;
+}
+
+@ClientModel({ loadStrategy: LoadStrategy.Instant })
+export class TestEagerOwner extends BaseModel {
+  @Property()
+  public name = "";
+
+  @ReferenceCollection("TestEagerChild", {
+    inverseOf: "ownerId",
+    lazy: false,
+  })
+  public children: LazyReferenceCollection<TestEagerChild>;
+}
+
+// TestEagerHolder exercises non-lazy @Reference and non-lazy @OwnedCollection.
+//
+//   refUserId  ──> TestUser     (eager Reference: pulled into the pool)
+//   leafIds[]  ──> TestEagerLeaf (eager OwnedCollection)
+
+@ClientModel({ loadStrategy: LoadStrategy.Instant })
+export class TestEagerHolder extends BaseModel {
+  @Property()
+  public name = "";
+
+  @Property({ indexed: true })
+  public refUserId = "";
+
+  @Reference("TestUser", { idField: "refUserId", lazy: false })
+  public refUser: TestUser;
+
+  @Property()
+  public leafIds: string[] = [];
+
+  @OwnedCollection("TestEagerLeaf", { idsField: "leafIds", lazy: false })
+  public ownedLeaves: LazyOwnedCollection<TestEagerLeaf>;
 }
 
 @ClientModel({ loadStrategy: LoadStrategy.Instant })

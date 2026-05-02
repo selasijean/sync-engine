@@ -138,4 +138,5 @@ export interface IStoreManager {
     value: string,
   ): Promise<BaseModel[]>;
   loadByIds(modelName: string, ids: string[]): Promise<BaseModel[]>;
+  loadOne(modelName: string, id: string): Promise<BaseModel | null>;
 }

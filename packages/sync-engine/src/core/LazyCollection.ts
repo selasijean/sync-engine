@@ -60,6 +60,7 @@ export abstract class LazyCollectionBase<T extends BaseModel = BaseModel> {
   readonly referencedModelName: string;
 
   private listeners = new Set<() => void>();
+  private inFlight: Promise<T[]> | null = null;
 
   constructor(referencedModelName: string) {
     this.referencedModelName = referencedModelName;
@@ -70,7 +71,18 @@ export abstract class LazyCollectionBase<T extends BaseModel = BaseModel> {
     });
   }
 
-  abstract load(): Promise<T[]>;
+  /** Subclass implementation. `load()` wraps this with concurrent-call dedup. */
+  protected abstract runLoad(): Promise<T[]>;
+
+  load(): Promise<T[]> {
+    if (this.inFlight != null) {
+      return this.inFlight;
+    }
+    this.inFlight = this.runLoad().finally(() => {
+      this.inFlight = null;
+    });
+    return this.inFlight;
+  }
 
   invalidate() {
     if (this.state === CollectionState.Loaded) {
@@ -172,11 +184,7 @@ export class LazyReferenceCollection<
     );
   }
 
-  async load(): Promise<T[]> {
-    if (this.state === CollectionState.Loading) {
-      return this.items;
-    }
-
+  protected async runLoad(): Promise<T[]> {
     runInAction(() => {
       this.state = CollectionState.Loading;
       this.error = null;
