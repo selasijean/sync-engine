@@ -81,7 +81,6 @@ async function makeManager(
     await manager.database.connect();
     await manager.database.saveMeta({
       lastSyncId: 0,
-      firstSyncId: 0,
       subscribedSyncGroups: opts.initialGroups ?? [],
       schemaHash: "test",
       dbVersion: 1,
@@ -289,7 +288,6 @@ describe("activateSyncGroup()", () => {
     await manager.database.connect();
     await manager.database.saveMeta({
       lastSyncId: 500,
-      firstSyncId: 0,
       subscribedSyncGroups: [],
       schemaHash: "test",
       dbVersion: 1,

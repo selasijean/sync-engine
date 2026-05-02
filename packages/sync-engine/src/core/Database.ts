@@ -20,7 +20,6 @@ import { ModelRegistry } from "./ModelRegistry";
 
 export interface DatabaseMeta {
   lastSyncId: number;
-  firstSyncId: number;
   subscribedSyncGroups: string[];
   schemaHash: string;
   /** IDB version number. Incremented on each client-side schema migration. */

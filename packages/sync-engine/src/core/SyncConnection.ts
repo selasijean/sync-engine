@@ -188,13 +188,13 @@ export class SyncConnection extends BaseSSEConnection {
     }
 
     // Step 6: update lastSyncId
-    if (packet.syncId > meta.lastSyncId) {
+    const advanced = packet.syncId > meta.lastSyncId;
+    if (advanced) {
       meta.lastSyncId = packet.syncId;
     }
-    if (groupsChanged) {
-      meta.firstSyncId = meta.lastSyncId;
+    if (advanced || groupsChanged) {
+      await this.database.saveMeta(meta);
     }
-    await this.database.saveMeta(meta);
 
     // Step 7: resolve transactions
     this.queue.resolveBySync(packet.syncId);

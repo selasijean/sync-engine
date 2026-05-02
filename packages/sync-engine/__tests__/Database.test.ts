@@ -246,7 +246,6 @@ describe("Database", () => {
     it("round-trips meta", async () => {
       const meta = {
         lastSyncId: 42,
-        firstSyncId: 1,
         subscribedSyncGroups: ["group-A"],
         schemaHash: "abc123",
         dbVersion: 1,
@@ -265,7 +264,6 @@ describe("Database", () => {
     it("currentMeta reflects the last saved value", async () => {
       const meta = {
         lastSyncId: 5,
-        firstSyncId: 1,
         subscribedSyncGroups: [],
         schemaHash: "h1",
         dbVersion: 1,
@@ -278,7 +276,6 @@ describe("Database", () => {
     it("overwrites meta on subsequent saves", async () => {
       await db.saveMeta({
         lastSyncId: 1,
-        firstSyncId: 1,
         subscribedSyncGroups: [],
         schemaHash: "a",
         dbVersion: 1,
@@ -286,7 +283,6 @@ describe("Database", () => {
       });
       await db.saveMeta({
         lastSyncId: 99,
-        firstSyncId: 1,
         subscribedSyncGroups: ["g"],
         schemaHash: "b",
         dbVersion: 1,
@@ -337,7 +333,6 @@ describe("Database", () => {
     it("returns Partial when lastSyncId > 0", async () => {
       await db.saveMeta({
         lastSyncId: 10,
-        firstSyncId: 1,
         subscribedSyncGroups: [],
         schemaHash: ModelRegistry.schemaHash,
         dbVersion: 1,
@@ -350,7 +345,6 @@ describe("Database", () => {
     it("returns Local when meta exists but lastSyncId === 0", async () => {
       await db.saveMeta({
         lastSyncId: 0,
-        firstSyncId: 0,
         subscribedSyncGroups: [],
         schemaHash: ModelRegistry.schemaHash,
         dbVersion: 1,

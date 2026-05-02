@@ -103,9 +103,7 @@ describe("onError", () => {
 
   it("fires for transactionSend when the sender rejects", async () => {
     const onError = vi.fn();
-    const transactionSender = vi
-      .fn()
-      .mockRejectedValue(new Error("timeout"));
+    const transactionSender = vi.fn().mockRejectedValue(new Error("timeout"));
 
     manager = new StoreManager({
       workspaceId: crypto.randomUUID(),
@@ -144,7 +142,6 @@ describe("onError", () => {
     await manager.database.connect();
     await manager.database.saveMeta({
       lastSyncId: 0,
-      firstSyncId: 0,
       subscribedSyncGroups: ["layer-A"],
       schemaHash: "test",
       dbVersion: 1,
@@ -223,16 +220,15 @@ describe("onError", () => {
     await manager.database.connect();
     await manager.database.saveMeta({
       lastSyncId: 0,
-      firstSyncId: 0,
       subscribedSyncGroups: [],
       schemaHash: "test",
       dbVersion: 1,
       backendDatabaseVersion: 0,
     });
 
-    await expect(
-      manager.activateSyncGroup("layer-A"),
-    ).rejects.toThrow("group fetch failed");
+    await expect(manager.activateSyncGroup("layer-A")).rejects.toThrow(
+      "group fetch failed",
+    );
 
     expect(onError).toHaveBeenCalled();
     const ctx = onError.mock.calls[0][1];
@@ -296,9 +292,7 @@ describe("onError", () => {
 
   it("is a no-op when onError isn't configured", async () => {
     // Same failure setup as the eagerReferenceLoad test, but without onError.
-    const onDemandFetcher = vi
-      .fn()
-      .mockRejectedValue(new Error("network"));
+    const onDemandFetcher = vi.fn().mockRejectedValue(new Error("network"));
 
     manager = new StoreManager({
       workspaceId: crypto.randomUUID(),

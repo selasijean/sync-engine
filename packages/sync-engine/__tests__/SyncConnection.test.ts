@@ -33,7 +33,6 @@ beforeEach(async () => {
   // SyncConnection reads currentMeta; save a baseline so it doesn't bail early.
   await db.saveMeta({
     lastSyncId: 0,
-    firstSyncId: 0,
     subscribedSyncGroups: [],
     schemaHash: "test",
     dbVersion: 1,
@@ -129,6 +128,29 @@ describe("SyncConnection", () => {
 
       const meta = await db.loadMeta();
       expect(meta!.lastSyncId).toBe(42);
+    });
+
+    it("skips saveMeta on replay packets that neither advance syncId nor change groups", async () => {
+      const baseline = await db.loadMeta();
+      baseline!.lastSyncId = 50;
+      await db.saveMeta(baseline!);
+
+      const saveSpy = vi.spyOn(db, "saveMeta");
+
+      await process(conn, {
+        syncId: 10,
+        syncActions: [
+          {
+            action: "I",
+            modelName: "TestTask",
+            modelId: "t-replay",
+            data: { title: "replay" },
+          },
+        ],
+      });
+
+      expect(saveSpy).not.toHaveBeenCalled();
+      saveSpy.mockRestore();
     });
   });
 

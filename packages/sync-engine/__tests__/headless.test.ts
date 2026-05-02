@@ -41,7 +41,6 @@ async function makeAgent(adapter?: StorageAdapter) {
   await storage.connect();
   await storage.saveMeta({
     lastSyncId: 0,
-    firstSyncId: 0,
     subscribedSyncGroups: [],
     schemaHash: "test",
     dbVersion: 1,
@@ -144,7 +143,6 @@ describe("Custom sseClientFactory", () => {
     await db.connect();
     await db.saveMeta({
       lastSyncId: 42,
-      firstSyncId: 0,
       subscribedSyncGroups: ["group-a"],
       schemaHash: "test",
       dbVersion: 1,
@@ -183,7 +181,6 @@ describe("Custom sseClientFactory", () => {
     await db.connect();
     await db.saveMeta({
       lastSyncId: 0,
-      firstSyncId: 0,
       subscribedSyncGroups: [],
       schemaHash: "test",
       dbVersion: 1,

@@ -483,7 +483,6 @@ export class StoreManager {
       this.setPhase(BootstrapPhase.Hydrating, `${this.objectPool.size} models`);
       await this.database.saveMeta({
         lastSyncId: res.lastSyncId,
-        firstSyncId: res.lastSyncId,
         subscribedSyncGroups: res.subscribedSyncGroups,
         schemaHash: ModelRegistry.schemaHash,
         dbVersion: this.database.currentMeta?.dbVersion ?? 1,
@@ -525,7 +524,6 @@ export class StoreManager {
       this.setPhase(BootstrapPhase.Hydrating, `${this.objectPool.size} models`);
       await this.database.saveMeta({
         lastSyncId: res.lastSyncId,
-        firstSyncId: res.lastSyncId,
         subscribedSyncGroups: res.subscribedSyncGroups,
         schemaHash: ModelRegistry.schemaHash,
         dbVersion: this.database.currentMeta?.dbVersion ?? 1,
