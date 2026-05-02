@@ -2,9 +2,9 @@
  * Tests for activateSyncGroup() and deactivateSyncGroup() on StoreManager.
  *
  * These methods let the app programmatically add/remove sync group subscriptions
- * at runtime. deactivateSyncGroup is unsubscribe-only: it removes the group from
- * meta and reconnects SSE, but does not evict already-loaded data. Callers that
- * need eviction do it explicitly via objectPool.remove + database.deleteModelsByIndex.
+ * at runtime. deactivateSyncGroup fires `onSyncGroupDelete` (when configured)
+ * after dropping the group from meta — that callback is the adopter's hook to
+ * evict pool/IDB records via sm.evictByIndex / sm.evictWhere or manual cleanup.
  */
 
 import {
@@ -21,6 +21,7 @@ import { MemoryAdapter } from "@sync-engine/MemoryAdapter";
 import { BaseModel } from "@sync-engine/BaseModel";
 import type { SSEClientFactory } from "@sync-engine/SyncConnection";
 import { TestLayeredDriver, addToPool } from "./fixtures";
+import { controllableSSEClient, makeFactory, sendMessage } from "./helpers/sseClient";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,11 @@ async function makeManager(
     initialGroups?: string[];
     syncUrl?: string;
     sseClientFactory?: SSEClientFactory;
+    onSyncGroupDelete?: (
+      groupId: string,
+      sm: StoreManager,
+    ) => void | Promise<void>;
+    bootstrap?: boolean;
   } = {},
 ) {
   const adapter = new MemoryAdapter();
@@ -66,16 +72,21 @@ async function makeManager(
     storageAdapter: adapter,
     syncUrl: opts.syncUrl,
     sseClientFactory: opts.sseClientFactory,
+    onSyncGroupDelete: opts.onSyncGroupDelete,
   });
-  await manager.database.connect();
-  await manager.database.saveMeta({
-    lastSyncId: 0,
-    firstSyncId: 0,
-    subscribedSyncGroups: opts.initialGroups ?? [],
-    schemaHash: "test",
-    dbVersion: 1,
-    backendDatabaseVersion: 0,
-  });
+  if (opts.bootstrap === true) {
+    await manager.bootstrap();
+  } else {
+    await manager.database.connect();
+    await manager.database.saveMeta({
+      lastSyncId: 0,
+      firstSyncId: 0,
+      subscribedSyncGroups: opts.initialGroups ?? [],
+      schemaHash: "test",
+      dbVersion: 1,
+      backendDatabaseVersion: 0,
+    });
+  }
   return manager;
 }
 
@@ -568,5 +579,100 @@ describe("activate → deactivate → reactivate roundtrip", () => {
 
     // Fetcher called on first activate and again after reactivation
     expect(syncGroupFetcher).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ── evictByIndex / evictWhere ─────────────────────────────────────────────────
+
+describe("evictByIndex()", () => {
+  it("removes pool + IDB records matching the index value", async () => {
+    manager = await makeManager({ initialGroups: ["layer-A", "layer-B"] });
+    await seedLayer(manager, "layer-A", ["d1", "d2"]);
+    await seedLayer(manager, "layer-B", ["d3"]);
+
+    await manager.evictByIndex("TestLayeredDriver", "layerId", "layer-A");
+
+    expect(manager.objectPool.getById("TestLayeredDriver", "d1")).toBeUndefined();
+    expect(manager.objectPool.getById("TestLayeredDriver", "d2")).toBeUndefined();
+    expect(manager.objectPool.getById("TestLayeredDriver", "d3")).toBeDefined();
+    expect(
+      await manager.database.readModel("TestLayeredDriver", "d1"),
+    ).toBeNull();
+    expect(
+      await manager.database.readModel("TestLayeredDriver", "d3"),
+    ).not.toBeNull();
+  });
+});
+
+describe("evictWhere()", () => {
+  it("removes pool + IDB records matching the predicate and reports the count", async () => {
+    manager = await makeManager({ initialGroups: ["layer-A"] });
+    await seedLayer(manager, "layer-A", ["d1", "d2", "d3"]);
+
+    const count = await manager.evictWhere(
+      "TestLayeredDriver",
+      (m) => m.id === "d1" || m.id === "d3",
+    );
+
+    // Pool walk + IDB walk both match d1/d3 → counted twice (sum of both passes).
+    expect(count).toBe(4);
+    expect(manager.objectPool.getById("TestLayeredDriver", "d1")).toBeUndefined();
+    expect(manager.objectPool.getById("TestLayeredDriver", "d2")).toBeDefined();
+    expect(manager.objectPool.getById("TestLayeredDriver", "d3")).toBeUndefined();
+    expect(
+      await manager.database.readModel("TestLayeredDriver", "d1"),
+    ).toBeNull();
+    expect(
+      await manager.database.readModel("TestLayeredDriver", "d2"),
+    ).not.toBeNull();
+  });
+});
+
+// ── onSyncGroupDelete ─────────────────────────────────────────────────────────
+
+describe("onSyncGroupDelete", () => {
+  it("fires once per group when deactivateSyncGroup is called by the user", async () => {
+    const onSyncGroupDelete = vi.fn();
+    manager = await makeManager({
+      initialGroups: ["layer-A", "layer-B"],
+      onSyncGroupDelete,
+    });
+
+    await manager.deactivateSyncGroup(["layer-A", "layer-B"]);
+
+    expect(onSyncGroupDelete).toHaveBeenCalledTimes(2);
+    expect(onSyncGroupDelete).toHaveBeenCalledWith("layer-A", manager);
+    expect(onSyncGroupDelete).toHaveBeenCalledWith("layer-B", manager);
+  });
+
+  it("is not called for already-unsubscribed groups", async () => {
+    const onSyncGroupDelete = vi.fn();
+    manager = await makeManager({ onSyncGroupDelete });
+
+    await manager.deactivateSyncGroup("layer-A");
+
+    expect(onSyncGroupDelete).not.toHaveBeenCalled();
+  });
+
+  it("fires when an SSE delta packet carries removedSyncGroups", async () => {
+    const onSyncGroupDelete = vi.fn();
+    const sseClient = controllableSSEClient();
+    manager = await makeManager({
+      initialGroups: ["layer-A"],
+      syncUrl: "http://test/events",
+      sseClientFactory: makeFactory(sseClient),
+      onSyncGroupDelete,
+      bootstrap: true,
+    });
+
+    sendMessage(sseClient, {
+      syncActions: [],
+      removedSyncGroups: ["layer-A"],
+    });
+
+    await vi.waitFor(() =>
+      expect(onSyncGroupDelete).toHaveBeenCalledTimes(1),
+    );
+    expect(onSyncGroupDelete).toHaveBeenCalledWith("layer-A", manager);
   });
 });

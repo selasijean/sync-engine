@@ -218,6 +218,22 @@ export interface StoreManagerConfig {
   onPhaseChange?: (phase: BootstrapPhase, detail?: string) => void;
   onDeltaPacket?: (packet: DeltaPacket) => void;
   onReady?: () => void;
+
+  /**
+   * Called when a sync group is removed — by `deactivateSyncGroup` or by an
+   * SSE delta carrying `removedSyncGroups`. The engine has already updated
+   * `dbMeta.subscribedSyncGroups` by the time this fires; SSE reconnect waits
+   * for the returned promise.
+   *
+   * Use it to evict pool/IDB records belonging to the group. The `sm` argument
+   * exposes `evictByIndex` / `evictWhere` helpers, the `objectPool`, the
+   * `database` adapter, and `ModelRegistry` is importable from the package
+   * if you want to walk every registered model.
+   */
+  onSyncGroupDelete?: (
+    groupId: string,
+    sm: StoreManager,
+  ) => void | Promise<void>;
 }
 
 export class StoreManager {
@@ -334,7 +350,10 @@ export class StoreManager {
           this.objectPool,
           this.transactionQueue,
           this.config.onDeltaPacket,
-          (added, _removed) => this.handleSyncGroupsAdded(added),
+          async (added, removed) => {
+            await this.handleSyncGroupsAdded(added);
+            await this.handleSyncGroupsRemoved(removed);
+          },
           this.isCollectionLoaded.bind(this),
           sseFactory,
           this.config.syncTransform,
@@ -824,6 +843,30 @@ export class StoreManager {
   }
 
   /**
+   * Called by SyncConnection when a delta packet's `removedSyncGroups` lists
+   * groups the client no longer has access to. SyncConnection has already
+   * updated `dbMeta.subscribedSyncGroups`.
+   */
+  private async handleSyncGroupsRemoved(
+    removedGroups: string[],
+  ): Promise<void> {
+    await this.fireOnSyncGroupDelete(removedGroups);
+  }
+
+  /** Fire `onSyncGroupDelete` once per group, serially. No-op when unconfigured. */
+  private async fireOnSyncGroupDelete(
+    groupIds: string[] | Iterable<string>,
+  ): Promise<void> {
+    const cb = this.config.onSyncGroupDelete;
+    if (cb == null) {
+      return;
+    }
+    for (const g of groupIds) {
+      await cb(g, this);
+    }
+  }
+
+  /**
    * Scoped bootstrap-fetcher call: same fetcher used by full/partial bootstrap,
    * scoped to a subset of groups via `syncGroups`. Also narrows `onlyModels` so
    * on-demand-loaded models aren't shipped when an `onDemandFetcher` is wired.
@@ -965,17 +1008,13 @@ export class StoreManager {
   }
 
   /**
-   * Deactivate a sync group: drop it from the subscribed list and reconnect
-   * SSE so the server stops streaming deltas for it.
+   * Deactivate a sync group: drop it from the subscribed list, fire
+   * `onSyncGroupDelete` (if configured) so the app can evict pool/IDB records,
+   * and reconnect SSE so the server stops streaming deltas for it.
    *
-   * Does NOT evict already-loaded records. If you want them gone, clear them
-   * yourself after this returns:
-   *
-   *   await sm.deactivateSyncGroup("ws-1");
-   *   for (const m of sm.objectPool.getAll("Issue")) {
-   *     if (m.workspaceId === "ws-1") sm.objectPool.remove("Issue", m.id);
-   *   }
-   *   await sm.database.deleteModelsByIndex("Issue", "workspaceId", "ws-1");
+   * If `onSyncGroupDelete` isn't configured the group's records remain in the
+   * pool/IDB. Use `sm.evictByIndex` / `sm.evictWhere` inside the callback, or
+   * walk `ModelRegistry.allModels()` for a generic sweeper.
    *
    * Idempotent — does nothing if the group is not currently active.
    */
@@ -997,6 +1036,7 @@ export class StoreManager {
       (g) => !toRemove.has(g),
     );
     await this.database.saveMeta(dbMeta);
+    await this.fireOnSyncGroupDelete(toRemove);
     this.syncConnection?.reconnect();
   }
 
@@ -1164,6 +1204,63 @@ export class StoreManager {
     value: string,
   ): boolean {
     return this.loadedCollections.has(
+      StoreManager.collectionKey(modelName, indexKey, value),
+    );
+  }
+
+  // ── Eviction helpers ──────────────────────────────────────────────────────
+
+  /** Walk the pool for `modelName`, removing instances matching `predicate`. */
+  private evictFromPool(
+    modelName: string,
+    predicate: (m: Record<string, unknown>) => boolean,
+  ): number {
+    let count = 0;
+    for (const m of this.objectPool.getAll(modelName)) {
+      if (predicate(m as unknown as Record<string, unknown>)) {
+        this.objectPool.remove(modelName, m.id);
+        this.loadedIds.delete(StoreManager.modelIdKey(modelName, m.id));
+        count++;
+      }
+    }
+    return count;
+  }
+
+  /**
+   * Remove every record of `modelName` matching `predicate` from pool and IDB.
+   * Predicate receives hydrated instances (pool) and raw records (IDB); write
+   * predicates that test plain property values so they work on both shapes.
+   * IDB side is a full cursor scan — prefer `evictByIndex` when the match is
+   * "indexed column equals value".
+   */
+  async evictWhere(
+    modelName: string,
+    predicate: (m: Record<string, unknown>) => boolean,
+  ): Promise<number> {
+    const poolCount = this.evictFromPool(modelName, predicate);
+    const records = await this.database.readAllModels(modelName);
+    const ids = records.filter(predicate).map((r) => r.id as string);
+    if (ids.length > 0) {
+      await this.database.deleteModels(modelName, ids);
+    }
+    return poolCount + ids.length;
+  }
+
+  /**
+   * Remove every record where `record[indexKey] === value`, using the IDB
+   * index for the database side. Pool side is still a linear scan (no
+   * secondary in-memory index by field value). Also clears the matching
+   * `loadedCollections` cache key so a future `loadCollection(modelName,
+   * indexKey, value)` re-fetches from the server instead of trusting IDB.
+   */
+  async evictByIndex(
+    modelName: string,
+    indexKey: string,
+    value: string,
+  ): Promise<void> {
+    this.evictFromPool(modelName, (m) => m[indexKey] === value);
+    await this.database.deleteModelsByIndex(modelName, indexKey, value);
+    this.loadedCollections.delete(
       StoreManager.collectionKey(modelName, indexKey, value),
     );
   }
