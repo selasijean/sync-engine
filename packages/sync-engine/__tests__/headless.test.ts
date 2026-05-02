@@ -391,9 +391,9 @@ describe("Isolated agent sessions", () => {
     const [a, b] = await Promise.all([makeAgent(), makeAgent()]);
 
     const delta: DeltaPacket = {
+      syncId: 1,
       syncActions: [
         {
-          id: 1,
           action: "I",
           modelName: "TestTask",
           modelId: "t-shared",
@@ -516,9 +516,9 @@ describe("MemoryAdapter as storageAdapter", () => {
     ]);
 
     const delta: DeltaPacket = {
+      syncId: 1,
       syncActions: [
         {
-          id: 1,
           action: "I",
           modelName: "TestTask",
           modelId: "t-mem",
@@ -751,9 +751,9 @@ describe("model.watch() in headless context", () => {
     );
 
     await pushPacket(conn, {
+      syncId: 1,
       syncActions: [
         {
-          id: 1,
           action: "I",
           modelName: "TestTask",
           modelId: "t-delta",
@@ -774,9 +774,9 @@ describe("model.watch() in headless context", () => {
     );
 
     await pushPacket(conn, {
+      syncId: 2,
       syncActions: [
         {
-          id: 2,
           action: "U",
           modelName: "TestTask",
           modelId: "t-delta",

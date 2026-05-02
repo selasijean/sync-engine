@@ -156,9 +156,8 @@ export interface StoreManagerConfig {
   sseInit?: EventSourceInit;
 
   /**
-   * Use when the backend sends a different envelope than the engine's
-   * canonical `{ id, modelName, modelId, action, data }`. Emit a
-   * `DeltaPacket` to carry sync-group changes alongside actions.
+   * Use when the backend sends a different envelope than the canonical
+   * `DeltaPacket`. Return null to drop a message.
    */
   syncTransform?: SyncMessageTransform;
 

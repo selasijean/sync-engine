@@ -38,7 +38,6 @@ export {
 } from "./BaseSSEConnection";
 
 export interface SyncAction {
-  id: number;
   modelName: string;
   modelId: string;
   action: "I" | "U" | "D" | "A" | "V" | "C";
@@ -46,6 +45,7 @@ export interface SyncAction {
 }
 
 export interface DeltaPacket {
+  syncId: number;
   syncActions: SyncAction[];
   addedSyncGroups?: string[];
   removedSyncGroups?: string[];
@@ -62,11 +62,11 @@ export type SyncGroupChangeHandler = (
 
 /**
  * Return null to drop the message. When not provided, raw payloads are
- * assumed to already match `SyncAction`.
+ * assumed to already match `DeltaPacket`.
  */
 export type SyncMessageTransform = (
   raw: unknown,
-) => SyncAction | SyncAction[] | DeltaPacket | null | undefined;
+) => DeltaPacket | null | undefined;
 
 export class SyncConnection extends BaseSSEConnection {
   // Serializes packet processing to prevent interleaved async mutations.
@@ -101,18 +101,12 @@ export class SyncConnection extends BaseSSEConnection {
 
   protected onMessage(data: string): void {
     const raw = JSON.parse(data);
-    const transformed =
-      this.transform != null ? this.transform(raw) : (raw as SyncAction);
-    if (transformed == null) {
+    const packet =
+      this.transform != null ? this.transform(raw) : (raw as DeltaPacket);
+    if (packet == null) {
       return;
     }
-    if (Array.isArray(transformed)) {
-      this.enqueuePacket({ syncActions: transformed });
-    } else if (Array.isArray((transformed as DeltaPacket).syncActions)) {
-      this.enqueuePacket(transformed as DeltaPacket);
-    } else {
-      this.enqueuePacket({ syncActions: [transformed as SyncAction] });
-    }
+    this.enqueuePacket(packet);
   }
 
   protected onReconnect(): void {
@@ -194,9 +188,8 @@ export class SyncConnection extends BaseSSEConnection {
     }
 
     // Step 6: update lastSyncId
-    const maxSyncId = Math.max(...packet.syncActions.map((a) => a.id));
-    if (maxSyncId > meta.lastSyncId) {
-      meta.lastSyncId = maxSyncId;
+    if (packet.syncId > meta.lastSyncId) {
+      meta.lastSyncId = packet.syncId;
     }
     if (groupsChanged) {
       meta.firstSyncId = meta.lastSyncId;
@@ -204,7 +197,7 @@ export class SyncConnection extends BaseSSEConnection {
     await this.database.saveMeta(meta);
 
     // Step 7: resolve transactions
-    this.queue.resolveBySync(maxSyncId);
+    this.queue.resolveBySync(packet.syncId);
 
     this.onPacket?.(packet);
   }

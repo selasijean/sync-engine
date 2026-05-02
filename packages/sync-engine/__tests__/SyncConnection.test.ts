@@ -57,9 +57,9 @@ describe("SyncConnection", () => {
   describe("action: I (insert)", () => {
     it("adds a new model to the pool", async () => {
       await process(conn, {
+        syncId: 1,
         syncActions: [
           {
-            id: 1,
             action: "I",
             modelName: "TestTask",
             modelId: "t1",
@@ -75,9 +75,9 @@ describe("SyncConnection", () => {
 
     it("writes the record to IndexedDB", async () => {
       await process(conn, {
+        syncId: 1,
         syncActions: [
           {
-            id: 1,
             action: "I",
             modelName: "TestTask",
             modelId: "t2",
@@ -98,9 +98,9 @@ describe("SyncConnection", () => {
       pool.put("TestTask", existing);
 
       await process(conn, {
+        syncId: 1,
         syncActions: [
           {
-            id: 1,
             action: "I",
             modelName: "TestTask",
             modelId: "t1",
@@ -116,9 +116,9 @@ describe("SyncConnection", () => {
 
     it("advances lastSyncId in meta", async () => {
       await process(conn, {
+        syncId: 42,
         syncActions: [
           {
-            id: 42,
             action: "I",
             modelName: "TestTask",
             modelId: "t1",
@@ -142,9 +142,9 @@ describe("SyncConnection", () => {
       pool.put("TestTask", task);
 
       await process(conn, {
+        syncId: 2,
         syncActions: [
           {
-            id: 2,
             action: "U",
             modelName: "TestTask",
             modelId: "t1",
@@ -160,9 +160,9 @@ describe("SyncConnection", () => {
       await db.writeModels("TestTask", [{ id: "t1", title: "Before" }]);
 
       await process(conn, {
+        syncId: 2,
         syncActions: [
           {
-            id: 2,
             action: "U",
             modelName: "TestTask",
             modelId: "t1",
@@ -178,9 +178,9 @@ describe("SyncConnection", () => {
     it("does nothing for a model not currently in the pool", async () => {
       await expect(
         process(conn, {
+          syncId: 2,
           syncActions: [
             {
-              id: 2,
               action: "U",
               modelName: "TestTask",
               modelId: "ghost",
@@ -202,9 +202,9 @@ describe("SyncConnection", () => {
       pool.put("TestTask", task);
 
       await process(conn, {
+        syncId: 3,
         syncActions: [
           {
-            id: 3,
             action: "D",
             modelName: "TestTask",
             modelId: "t1",
@@ -219,9 +219,9 @@ describe("SyncConnection", () => {
       await db.writeModels("TestTask", [{ id: "t1", title: "Gone" }]);
 
       await process(conn, {
+        syncId: 3,
         syncActions: [
           {
-            id: 3,
             action: "D",
             modelName: "TestTask",
             modelId: "t1",
@@ -236,9 +236,9 @@ describe("SyncConnection", () => {
     it("is safe when the model is not in the pool", async () => {
       await expect(
         process(conn, {
+          syncId: 3,
           syncActions: [
             {
-              id: 3,
               action: "D",
               modelName: "TestTask",
               modelId: "ghost",
@@ -271,9 +271,9 @@ describe("SyncConnection", () => {
       pool.put("TestNote", note2);
 
       await process(conn, {
+        syncId: 4,
         syncActions: [
           {
-            id: 4,
             action: "D",
             modelName: "TestTask",
             modelId: "task-1",
@@ -297,9 +297,9 @@ describe("SyncConnection", () => {
       pool.put("TestNote", noteOther);
 
       await process(conn, {
+        syncId: 4,
         syncActions: [
           {
-            id: 4,
             action: "D",
             modelName: "TestTask",
             modelId: "task-1",
@@ -326,9 +326,9 @@ describe("SyncConnection", () => {
       pool.put("TestTask", task);
 
       await process(conn, {
+        syncId: 5,
         syncActions: [
           {
-            id: 5,
             action: "D",
             modelName: "TestProject",
             modelId: "proj-1",
@@ -362,11 +362,11 @@ describe("SyncConnection", () => {
       task.makeModelObservable();
       pool.put("TestTask", task);
 
-      // A delta packet with id 7 should call resolveBySync(7) → clear awaitingSync
+      // A delta packet with syncId 7 should call resolveBySync(7) → clear awaitingSync
       await process(conn, {
+        syncId: 7,
         syncActions: [
           {
-            id: 7,
             action: "U",
             modelName: "TestTask",
             modelId: "t1",
@@ -405,9 +405,9 @@ describe("SyncConnection", () => {
 
     it("does not hydrate a Partial model insert when its collection has not been loaded", async () => {
       await process(connWithChecker, {
+        syncId: 1,
         syncActions: [
           {
-            id: 1,
             action: "I",
             modelName: "TestActivity",
             modelId: "act-1",
@@ -421,9 +421,9 @@ describe("SyncConnection", () => {
 
     it("still writes the record to IDB even when not hydrating into pool", async () => {
       await process(connWithChecker, {
+        syncId: 1,
         syncActions: [
           {
-            id: 1,
             action: "I",
             modelName: "TestActivity",
             modelId: "act-1",
@@ -440,9 +440,9 @@ describe("SyncConnection", () => {
       loadedCollections.add("TestActivity:taskId:t1");
 
       await process(connWithChecker, {
+        syncId: 1,
         syncActions: [
           {
-            id: 1,
             action: "I",
             modelName: "TestActivity",
             modelId: "act-1",
@@ -458,9 +458,9 @@ describe("SyncConnection", () => {
       loadedCollections.add("TestActivity:taskId:t2"); // t2, not t1
 
       await process(connWithChecker, {
+        syncId: 1,
         syncActions: [
           {
-            id: 1,
             action: "I",
             modelName: "TestActivity",
             modelId: "act-1",
@@ -475,9 +475,9 @@ describe("SyncConnection", () => {
     it("always hydrates Instant model inserts regardless of loaded collections", async () => {
       // loadedCollections is empty — but TestTask is Instant so it always hydrates
       await process(connWithChecker, {
+        syncId: 1,
         syncActions: [
           {
-            id: 1,
             action: "I",
             modelName: "TestTask",
             modelId: "t-new",
@@ -497,9 +497,9 @@ describe("SyncConnection", () => {
       pool.put("TestActivity", existing);
 
       await process(connWithChecker, {
+        syncId: 1,
         syncActions: [
           {
-            id: 1,
             action: "I",
             modelName: "TestActivity",
             modelId: "act-1",
@@ -515,7 +515,7 @@ describe("SyncConnection", () => {
   // ── transform ─────────────────────────────────────────────────────────────
 
   describe("transform", () => {
-    it("converts a non-canonical envelope into a SyncAction", async () => {
+    it("converts a non-canonical envelope into a DeltaPacket", async () => {
       const transform: SyncMessageTransform = (raw) => {
         const m = raw as {
           sync_id: number;
@@ -526,11 +526,15 @@ describe("SyncConnection", () => {
         };
         const action = m.type === "delete" ? "D" : "I";
         return {
-          id: m.sync_id,
-          action,
-          modelName: m.entity,
-          modelId: m.entity_id,
-          data: m.payload,
+          syncId: m.sync_id,
+          syncActions: [
+            {
+              action,
+              modelName: m.entity,
+              modelId: m.entity_id,
+              data: m.payload,
+            },
+          ],
         };
       };
 
@@ -565,20 +569,22 @@ describe("SyncConnection", () => {
       c.disconnect();
     });
 
-    it("accepts an array of SyncActions", async () => {
+    it("transforms a batch envelope into a DeltaPacket", async () => {
       const transform: SyncMessageTransform = (raw) => {
         const items = raw as Array<{
           sync_id: number;
           entity_id: string;
           title: string;
         }>;
-        return items.map((m) => ({
-          id: m.sync_id,
-          action: "I" as const,
-          modelName: "TestTask",
-          modelId: m.entity_id,
-          data: { title: m.title },
-        }));
+        return {
+          syncId: Math.max(...items.map((m) => m.sync_id)),
+          syncActions: items.map((m) => ({
+            action: "I" as const,
+            modelName: "TestTask",
+            modelId: m.entity_id,
+            data: { title: m.title },
+          })),
+        };
       };
 
       const client = controllableSSEClient();
@@ -626,9 +632,9 @@ describe("SyncConnection", () => {
       c.connect();
 
       const packet: DeltaPacket = {
+        syncId: 9,
         syncActions: [
           {
-            id: 9,
             action: "I",
             modelName: "TestTask",
             modelId: "t-packet",
@@ -682,23 +688,21 @@ describe("SyncConnection", () => {
   describe("multiple actions in one packet", () => {
     it("processes all actions and uses the max syncId", async () => {
       await process(conn, {
+        syncId: 12,
         syncActions: [
           {
-            id: 10,
             action: "I",
             modelName: "TestTask",
             modelId: "t10",
             data: { title: "A" },
           },
           {
-            id: 11,
             action: "I",
             modelName: "TestTask",
             modelId: "t11",
             data: { title: "B" },
           },
           {
-            id: 12,
             action: "I",
             modelName: "TestProject",
             modelId: "p1",
