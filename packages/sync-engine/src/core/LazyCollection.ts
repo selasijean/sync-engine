@@ -1,32 +1,30 @@
 /**
- * LazyReferenceCollection and LazyBackReference
+ * RefCollection and BackRef
  *
- * These are RUNTIME OBJECTS, not just metadata. When a model is hydrated,
- * each @ReferenceCollection property becomes a LazyReferenceCollection
- * instance, and each @BackReference becomes a LazyBackReference.
- *
- * In the engine, Model.hydrate() finds all referenceCollection/backReference
- * properties and calls their hydrate() methods. That hydrate() computes
- * the partial index values — the query parameters needed to lazy-load
- * the related models from IDB.
+ * Runtime objects backing the collection / back-reference decorators. When a
+ * model is hydrated, each @ReferenceCollection / @LazyReferenceCollection
+ * property becomes a `RefCollection` instance, and each @BackReference becomes
+ * a `BackRef`. The runtime shape is identical regardless of whether the
+ * decorator is eager or lazy — eager just auto-fires `.load()` during
+ * makeModelObservable().
  *
  * Key behaviors:
  *
- *   LazyReferenceCollection:
+ *   RefCollection:
  *     - Stores partial index values (e.g. "all Issues where teamId = team.id")
  *     - On first access, queries ObjectPool for already-loaded matches
  *     - If not fully loaded, queries IDB by index
  *     - Tracks loading state (idle → loading → loaded)
  *     - After a delta packet adds/removes items, can be invalidated and re-queried
  *
- *   LazyBackReference:
+ *   BackRef:
  *     - Resolves a single inverse model (e.g. Issue.favorite → Favorite)
  *     - Supports cascade delete: when the owning model is deleted,
  *       the back-referenced model is also removed from the pool
  *
  * Usage from React:
  *   const team = useModel("Team", teamId);
- *   const { items, isLoading, load } = team.issues;  // LazyReferenceCollection
+ *   const { items, isLoading, load } = team.issues;  // RefCollection
  *   // or via hook:
  *   const { items, isLoading } = useLazyCollection(team?.issues);
  */
@@ -123,10 +121,12 @@ export abstract class LazyCollectionBase<T extends BaseModel = BaseModel> {
 }
 
 // ---------------------------------------------------------------------------
-// LazyReferenceCollection — one-to-many queried by foreign key index
+// RefCollection — one-to-many queried by foreign key index. The runtime shape
+// is identical for eager and lazy decorators; the decorator only chooses
+// whether `.load()` fires automatically during makeModelObservable().
 // ---------------------------------------------------------------------------
 
-export class LazyReferenceCollection<
+export class RefCollection<
   T extends BaseModel = BaseModel,
 > extends LazyCollectionBase<T> {
   /** The foreign key on the child model (e.g. "teamId"). */
@@ -215,18 +215,16 @@ export class LazyReferenceCollection<
 }
 
 // ---------------------------------------------------------------------------
-// LazyBackReference
+// BackRef — single inverse reference.
 //
-// A single inverse reference. When the owning model is deleted, the
-// back-referenced model should also be removed (cascade).
+// When the owning model is deleted, the back-referenced model is cascade-removed.
 //
 // Example: Issue has @BackReference("Favorite", "issueId")
-// → issue.favorite is a LazyBackReference that resolves the Favorite
-//   where issueId === issue.id
-// → when Issue is deleted, the Favorite is cascade-removed from the pool
+// → issue.favorite is a BackRef that resolves the Favorite where
+//   issueId === issue.id
 // ---------------------------------------------------------------------------
 
-export class LazyBackReference<T extends BaseModel = BaseModel> {
+export class BackRef<T extends BaseModel = BaseModel> {
   value: T | null = null;
 
   state: CollectionState = CollectionState.Idle;

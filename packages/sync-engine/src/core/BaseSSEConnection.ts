@@ -7,9 +7,10 @@ export interface SSEClient {
 
 export type SSEClientFactory = (url: string) => SSEClient;
 
-export const createBrowserSSEFactory = (
-  init?: EventSourceInit,
-): SSEClientFactory => (url) => new EventSource(url, init);
+export const createBrowserSSEFactory =
+  (init?: EventSourceInit): SSEClientFactory =>
+  (url) =>
+    new EventSource(url, init);
 
 export abstract class BaseSSEConnection {
   private eventSource: SSEClient | null = null;

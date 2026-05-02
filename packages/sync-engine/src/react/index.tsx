@@ -18,7 +18,7 @@ import React, {
 } from "react";
 import { StoreManager, type StoreManagerConfig } from "../core/StoreManager";
 import { BootstrapPhase } from "../core/types";
-import { LazyCollectionBase, LazyBackReference } from "../core/LazyCollection";
+import { LazyCollectionBase, BackRef } from "../core/LazyCollection";
 
 // ---------------------------------------------------------------------------
 // Context
@@ -421,7 +421,7 @@ export function useUndoRedo() {
 }
 
 // ---------------------------------------------------------------------------
-// useCollection — subscribe to a LazyReferenceCollection directly
+// useCollection — subscribe to a RefCollection directly
 //
 // The cleanest way to use ReferenceCollections in components:
 //
@@ -474,16 +474,14 @@ export function useCollection<T = any>(
 }
 
 // ---------------------------------------------------------------------------
-// useBackRef — subscribe to a LazyBackReference directly
+// useBackRef — subscribe to a BackRef directly
 //
 //   const issue = useModel("Issue", issueId);
 //   const { value: favorite, isLoading } = useBackRef(issue?.favorite);
 // ---------------------------------------------------------------------------
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function useBackRef<T = any>(
-  backRef: LazyBackReference | null | undefined,
-) {
+export function useBackRef<T = any>(backRef: BackRef | null | undefined) {
   const [tick, forceRender] = useState(0);
 
   useEffect(() => {

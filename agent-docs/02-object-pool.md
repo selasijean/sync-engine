@@ -82,7 +82,7 @@ This is mitigated by `LoadStrategy.Lazy` and `LoadStrategy.Partial`, but for Ins
 The pool is just a flat Map per model type. There are no indexes, no filtering, no sorting built into the pool itself. If you want all Issues with `priority > 2`, you call `pool.getAll("Issue").filter(...)`. For large datasets, this is a linear scan. IndexedDB indexes exist for efficient bootstrap loading, but in-memory querying is always O(n).
 
 ### Relationships are unidirectional by default
-`issue.team` resolves from the pool. But "all Issues for a Team" requires a `LazyReferenceCollection`, which isn't cached — it re-queries on every load. There's no maintained reverse index in the pool.
+`issue.team` resolves from the pool. But "all Issues for a Team" requires a `RefCollection`, which isn't cached — it re-queries on every load. There's no maintained reverse index in the pool.
 
 ### Reference resolution can return null silently
 If `issue.teamId` is set but the Team hasn't been loaded yet, `issue.team` returns `null`. This is correct behavior (partial loading), but it means code that traverses relationships needs to handle nulls defensively, even for non-nullable declared references.

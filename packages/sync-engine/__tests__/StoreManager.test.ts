@@ -1167,7 +1167,9 @@ describe("StoreManager", () => {
 
   describe("fullBootstrap() — onDemandFetcher narrowing", () => {
     it("excludes Partial/Lazy/ExplicitlyRequested from onlyModels when onDemandFetcher is set", async () => {
-      const bootstrapFetcher = vi.fn().mockResolvedValue(emptyBootstrapResponse);
+      const bootstrapFetcher = vi
+        .fn()
+        .mockResolvedValue(emptyBootstrapResponse);
       const sm = new StoreManager({
         workspaceId: crypto.randomUUID(),
         bootstrapFetcher,
@@ -1187,7 +1189,9 @@ describe("StoreManager", () => {
     });
 
     it("omits onlyModels entirely when onDemandFetcher is not set (single-phase)", async () => {
-      const bootstrapFetcher = vi.fn().mockResolvedValue(emptyBootstrapResponse);
+      const bootstrapFetcher = vi
+        .fn()
+        .mockResolvedValue(emptyBootstrapResponse);
       const sm = new StoreManager({
         workspaceId: crypto.randomUUID(),
         bootstrapFetcher,
@@ -1202,7 +1206,9 @@ describe("StoreManager", () => {
     });
 
     it("excludes both deferred AND on-demand strategies from phase 1 when both are set", async () => {
-      const bootstrapFetcher = vi.fn().mockResolvedValue(emptyBootstrapResponse);
+      const bootstrapFetcher = vi
+        .fn()
+        .mockResolvedValue(emptyBootstrapResponse);
       const sm = new StoreManager({
         workspaceId: crypto.randomUUID(),
         bootstrapFetcher,

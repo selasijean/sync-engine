@@ -1,8 +1,8 @@
 /**
- * LazyOwnedCollection — many-to-many where the parent owns the list of IDs.
+ * OwnedRefs — many-to-many where the parent owns the list of IDs.
  *
- * Contrast with LazyReferenceCollection, where the *child* holds the foreign
- * key (e.g. Issue has teamId). Here the parent holds the array.
+ * Contrast with RefCollection, where the *child* holds the foreign key (e.g.
+ * Issue has teamId). Here the parent holds the array.
  *
  * Resolution:
  *   - resolveFromPool: looks up each ID via pool.getById — synchronous
@@ -13,14 +13,14 @@
  *   public issueIds: string[] = [];
  *
  *   @OwnedCollection("Issue", { idsField: "issueIds" })
- *   public issues: LazyOwnedCollection<Issue>;
+ *   public issues: OwnedRefs<Issue>;
  */
 
 import { runInAction } from "mobx";
 import type { BaseModel } from "./BaseModel";
 import { LazyCollectionBase, CollectionState } from "./LazyCollection";
 
-export class LazyOwnedCollection<
+export class OwnedRefs<
   T extends BaseModel = BaseModel,
 > extends LazyCollectionBase<T> {
   /** Live getter — reads the current IDs array from the parent model each call. */

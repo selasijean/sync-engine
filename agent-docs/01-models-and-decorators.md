@@ -52,7 +52,7 @@ Registers the class with the registry. The `loadStrategy` controls when instance
 
 Available strategies: `Instant`, `Lazy`, `Partial`, `ExplicitlyRequested`, and `Ephemeral`. `Ephemeral` models live only in the ObjectPool — they are never written to or read from IDB. They are typically updated via `ModelStream` (secondary SSE connections) and are useful for transient data like live metrics or computation results.
 
-`usedForPartialIndexes: true` means other models can use this model's ID fields as index keys in IndexedDB (used by `LazyReferenceCollection` queries).
+`usedForPartialIndexes: true` means other models can use this model's ID fields as index keys in IndexedDB (used by `RefCollection` queries).
 
 ### `@Property`
 
@@ -96,7 +96,9 @@ The `onDelete` option tells the engine what to do when the referenced model is d
 - `"nullify"` — set the ID field to null (e.g., clear `assigneeId` when User is deleted)
 - `"restrict"` — throw a `RestrictDeleteError` if any instance still holds this reference (i.e., you must clean up first)
 
-`lazy` (default: `true`) controls whether the referenced model is pulled into the pool when the parent is hydrated. With `lazy: false`, the engine calls `storeManager.loadOne(referenceTo, id)` from inside `makeModelObservable()` so the accessor doesn't return `null` on first read. See `04-lazy-loading.md`.
+### `@LazyReference`
+
+The lazy variant of `@Reference`. Same getter/setter semantics, but `makeModelObservable()` does NOT call `storeManager.loadOne` — the accessor returns whatever's in the pool right now (or `null`). Use when the referenced model is loaded by another path (separate fetch, lazy hook, etc.). See `04-lazy-loading.md`.
 
 ### `@ReferenceArray`
 
@@ -107,18 +109,17 @@ public labelIds: string[] = [];
 
 The parent stores an array of IDs directly on itself. The decorator creates a virtual getter `labels` that resolves each ID from the pool. Unlike `@ReferenceCollection`, the IDs live on the parent — not on the children.
 
-### `@ReferenceCollection`
+### `@ReferenceCollection` / `@LazyReferenceCollection`
 
 ```typescript
 @ReferenceCollection("Issue", { inverseOf: "teamId" })
-public issues: LazyReferenceCollection<Issue>;
+public issues: RefCollection<Issue>;
 ```
 
-One-to-many where the **foreign key lives on the child**. `team.issues` is a `LazyReferenceCollection` that, when loaded, queries all Issues where `teamId === team.id`. By default it's lazy — doesn't load until you call `.load()` or use the `useCollection` hook.
+One-to-many where the **foreign key lives on the child**. `team.issues` is a `RefCollection` (the runtime class) that exposes `.items`, `.load()`, `.isLoaded`, etc.
 
-`lazy` (default: `true`) controls hydration timing:
-- `true` — collection stays Idle until something triggers `.load()`.
-- `false` — eagerly loaded inside `makeModelObservable()` right after the parent is hydrated. Recursion is automatic: each loaded child runs its own `makeModelObservable`, so non-lazy collections nested further down the tree also load.
+- `@ReferenceCollection` — eager. `makeModelObservable()` fires `.load()` so children land in the pool alongside the parent. Recursion is automatic: each loaded child runs its own `makeModelObservable`, so eager relationships nested further down the tree also load.
+- `@LazyReferenceCollection` — lazy. Collection stays Idle until something triggers `.load()` or the `useCollection` hook subscribes.
 
 See `04-lazy-loading.md` for how this works internally.
 
@@ -126,24 +127,25 @@ See `04-lazy-loading.md` for how this works internally.
 
 ```typescript
 @BackReference("Favorite", "issueId")
-public favorite: LazyBackReference;
+public favorite: BackRef;
 ```
 
 The inverse of a `@Reference`. Means: "find the Favorite record that has `issueId` pointing to me." This is also an ownership relationship — when this Issue is deleted, the engine will cascade-delete the Favorite.
 
-### `@OwnedCollection`
+### `@OwnedCollection` / `@LazyOwnedCollection`
 
 ```typescript
 @Property()
 public memberIds: string[] = [];
 
 @OwnedCollection("User", { idsField: "memberIds" })
-public members: LazyOwnedCollection<User>;
+public members: OwnedRefs<User>;
 ```
 
-The parent stores an array of child IDs directly as a `@Property`. The `@OwnedCollection` turns that array into a lazy collection. When the array changes, the collection reflects it on next load.
+The parent stores an array of child IDs directly as a `@Property`. The decorator turns that array into a runtime `OwnedRefs` collection that resolves IDs from the pool / IDB. When the array changes, the collection reflects it on next load.
 
-`lazy` (default: `true`) — pass `lazy: false` to eagerly load owned items into the pool inside `makeModelObservable()`. Symmetric with `@ReferenceCollection`.
+- `@OwnedCollection` — eager. `makeModelObservable()` fires `.load()` to pull owned items into the pool alongside the parent.
+- `@LazyOwnedCollection` — lazy. Collection stays Idle until `.load()` is called.
 
 ### `@Action`
 

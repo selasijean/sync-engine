@@ -75,7 +75,7 @@ describe("BaseModel", () => {
       expect(task.__mobx["title"]).toBeDefined();
     });
 
-    it("creates a LazyReferenceCollection for @ReferenceCollection", () => {
+    it("creates a RefCollection for @ReferenceCollection", () => {
       const proj = new TestProject();
       proj.hydrate({ id: "p1", title: "My Project" });
       proj.makeModelObservable();

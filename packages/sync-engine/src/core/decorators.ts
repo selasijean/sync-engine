@@ -108,37 +108,39 @@ export function EphemeralProperty() {
 }
 
 // ---------------------------------------------------------------------------
-// @Reference — links a user-declared ID field to a virtual model accessor.
+// @Reference / @LazyReference — links a user-declared ID field to a virtual
+// model accessor.
 //
 // The user declares the ID field explicitly with @Property:
 //
 //   @Property({ indexed: true }) teamId = "";
 //   @Reference("Team", { onDelete: "cascade" }) declare team: Team;
 //
-// @Reference then:
-//   1. Promotes `teamId` from PropertyType.Property → PropertyType.Reference,
-//      merging in referenceTo / onDelete / nullable / lazy.
+// The decorator:
+//   1. Promotes `teamId` from PropertyType.Property → PropertyType.Reference.
 //   2. Registers `team` as a virtual PropertyType.ReferenceModel (not persisted).
 //   3. Defines a getter/setter that links `team` ↔ `teamId`.
 //
 // The ID field name defaults to `${key}Id` but can be overridden with idField:
 //   @Reference("Team", { idField: "parentTeamId" }) declare team: Team;
 //
-// `lazy` (default: true)
-//   true  — accessing `.team` returns whatever is in the pool right now (or null).
-//   false — eagerly pulls the referenced model into the pool inside
-//           makeModelObservable, so the accessor doesn't return null on first
-//           read after parent hydration.
+// `@Reference`     — eager: makeModelObservable() pulls the referenced model
+//                    into the pool via storeManager.loadOne so the accessor
+//                    doesn't return null on first read.
+// `@LazyReference` — lazy: the getter returns whatever is in the pool right
+//                    now (or null); no automatic load.
 // ---------------------------------------------------------------------------
 
-export function Reference(
+interface ReferenceOpts {
+  nullable?: boolean;
+  idField?: string;
+  onDelete?: "cascade" | "nullify" | "restrict";
+}
+
+function defineReference(
+  lazy: boolean,
   referenceTo: string,
-  opts: {
-    nullable?: boolean;
-    lazy?: boolean;
-    idField?: string;
-    onDelete?: "cascade" | "nullify" | "restrict";
-  } = {},
+  opts: ReferenceOpts,
 ) {
   // Legacy decorator target — no better type exists for prototype manipulation
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -147,17 +149,14 @@ export function Reference(
     ensureRegistered(modelName, target.constructor);
     const idKey = opts.idField ?? key + "Id";
 
-    // 1. Promote the user-declared ID field to PropertyType.Reference, adding
-    //    reference metadata. Throws if the user forgot to declare it with @Property.
     ModelRegistry.updateProperty(modelName, idKey, {
       type: PropertyType.Reference,
       referenceTo,
       nullable: opts.nullable,
       onDelete: opts.onDelete,
-      lazy: opts.lazy,
+      lazy,
     });
 
-    // 2. Register the virtual model accessor (NOT persisted)
     ModelRegistry.registerProperty(modelName, {
       name: key,
       type: PropertyType.ReferenceModel,
@@ -165,10 +164,9 @@ export function Reference(
       idField: idKey,
     });
 
-    // 3. Define getter/setter that links the model object ↔ its ID
     Object.defineProperty(target, key, {
       configurable: true,
-      enumerable: false, // not serialized
+      enumerable: false,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       get(this: any) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -186,31 +184,41 @@ export function Reference(
   };
 }
 
+export function Reference(referenceTo: string, opts: ReferenceOpts = {}) {
+  return defineReference(false, referenceTo, opts);
+}
+
+export function LazyReference(referenceTo: string, opts: ReferenceOpts = {}) {
+  return defineReference(true, referenceTo, opts);
+}
+
 // ---------------------------------------------------------------------------
-// @ReferenceCollection — one-to-many from parent side
+// @ReferenceCollection / @LazyReferenceCollection — one-to-many from parent side.
 //
-// Registers metadata only. The runtime LazyReferenceCollection object is
-// created during BaseModel.makeModelObservable().
+// Registers metadata only. The runtime `RefCollection` object is created during
+// BaseModel.makeModelObservable() and exposes `.items`, `.load()`, `.isLoaded`,
+// `.isLoading`, `.resolveFromPool()`, etc.
 //
-// The property becomes a LazyReferenceCollection with .items, .load(),
-// .isLoaded, .isLoading, .resolveFromPool(), etc.
-//
-//   const issues = team.issues;          // LazyReferenceCollection
+//   const issues = team.issues;              // RefCollection
 //   const items = issues.resolveFromPool(pool); // sync, from memory
-//   await issues.load();                 // async, from IDB
-//   issues.items;                        // the loaded models
+//   await issues.load();                     // async, from IDB
+//   issues.items;                            // the loaded models
 //
-// `lazy` (default: true)
-//   true  — collection stays Idle until something calls .load() / .resolveFromPool().
-//   false — eagerly loaded inside makeModelObservable() right after the parent
-//           is hydrated. Recursion is automatic: each child loaded into the pool
-//           runs its own makeModelObservable, so non-lazy collections nested
-//           further down the tree are also eagerly loaded.
+// `@ReferenceCollection`     — eager: makeModelObservable() fires `.load()` so
+//                              children land in the pool alongside the parent.
+//                              Recursion is automatic.
+// `@LazyReferenceCollection` — lazy: collection stays Idle until something
+//                              calls `.load()` or the React hook subscribes.
 // ---------------------------------------------------------------------------
 
-export function ReferenceCollection(
+interface ReferenceCollectionOpts {
+  inverseOf?: string;
+}
+
+function defineReferenceCollection(
+  lazy: boolean,
   referenceTo: string,
-  opts: { lazy?: boolean; inverseOf?: string } = {},
+  opts: ReferenceCollectionOpts,
 ) {
   // Legacy decorator target — no better type exists for prototype manipulation
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -218,9 +226,8 @@ export function ReferenceCollection(
     const modelName = target.constructor.name;
     ensureRegistered(modelName, target.constructor);
 
-    // Derive the foreign key on the child model.
-    // Convention: parentModelName (lowercased first char) + "Id"
-    // Override with inverseOf when convention doesn't match.
+    // Derive the foreign key on the child model. Convention: parentModelName
+    // (lowercased first char) + "Id". Override with inverseOf when needed.
     const inverseKey =
       opts.inverseOf ??
       modelName.charAt(0).toLowerCase() + modelName.slice(1) + "Id";
@@ -229,12 +236,10 @@ export function ReferenceCollection(
       name: key,
       type: PropertyType.ReferenceCollection,
       referenceTo,
-      lazy: opts.lazy,
+      lazy,
       inverseOf: inverseKey,
     });
 
-    // The getter reads the LazyReferenceCollection stored on __collections[key].
-    // Created in makeModelObservable(). Before that, returns undefined.
     Object.defineProperty(target, key, {
       configurable: true,
       enumerable: false,
@@ -247,10 +252,24 @@ export function ReferenceCollection(
   };
 }
 
+export function ReferenceCollection(
+  referenceTo: string,
+  opts: ReferenceCollectionOpts = {},
+) {
+  return defineReferenceCollection(false, referenceTo, opts);
+}
+
+export function LazyReferenceCollection(
+  referenceTo: string,
+  opts: ReferenceCollectionOpts = {},
+) {
+  return defineReferenceCollection(true, referenceTo, opts);
+}
+
 // ---------------------------------------------------------------------------
 // @BackReference — inverse of a Reference
 //
-// Metadata-only registration. The runtime LazyBackReference is created in
+// Metadata-only registration. The runtime BackRef is created in
 // BaseModel.makeModelObservable().
 //
 // Key behavior: a BackReference is "owned" by the referenced model.
@@ -301,27 +320,30 @@ export function ReferenceArray(referenceTo: string) {
 }
 
 // ---------------------------------------------------------------------------
-// @OwnedCollection — many-to-many where the parent owns an array of IDs
+// @OwnedCollection / @LazyOwnedCollection — many-to-many where the parent
+// owns an array of IDs.
 //
-// The parent model stores the IDs array as a @Property; @OwnedCollection
-// wraps it with a lazy-loadable collection interface.
+// The parent stores the IDs as a @Property; the decorator wraps that array
+// with a runtime `OwnedRefs` collection.
 //
 //   @Property()
 //   public issueIds: string[] = [];
 //
 //   @OwnedCollection("Issue", { idsField: "issueIds" })
-//   public issues: LazyOwnedCollection<Issue>;
+//   public issues: OwnedRefs<Issue>;
 //
-// `lazy` (default: true)
-//   true  — collection stays Idle until something calls .load() / .resolveFromPool().
-//   false — eagerly loaded inside makeModelObservable() right after the parent
-//           is hydrated. Recursion is automatic (each loaded child runs its own
-//           makeModelObservable, firing any non-lazy collections it declares).
+// `@OwnedCollection`     — eager: makeModelObservable() fires `.load()`.
+// `@LazyOwnedCollection` — lazy: collection stays Idle until `.load()` is called.
 // ---------------------------------------------------------------------------
 
-export function OwnedCollection(
+interface OwnedCollectionOpts {
+  idsField: string;
+}
+
+function defineOwnedCollection(
+  lazy: boolean,
   referenceTo: string,
-  opts: { idsField: string; lazy?: boolean },
+  opts: OwnedCollectionOpts,
 ) {
   // Legacy decorator target — no better type exists for prototype manipulation
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -334,7 +356,7 @@ export function OwnedCollection(
       type: PropertyType.OwnedCollection,
       referenceTo,
       idsField: opts.idsField,
-      lazy: opts.lazy,
+      lazy,
     });
 
     Object.defineProperty(target, key, {
@@ -346,6 +368,20 @@ export function OwnedCollection(
       },
     });
   };
+}
+
+export function OwnedCollection(
+  referenceTo: string,
+  opts: OwnedCollectionOpts,
+) {
+  return defineOwnedCollection(false, referenceTo, opts);
+}
+
+export function LazyOwnedCollection(
+  referenceTo: string,
+  opts: OwnedCollectionOpts,
+) {
+  return defineOwnedCollection(true, referenceTo, opts);
 }
 
 // ---------------------------------------------------------------------------

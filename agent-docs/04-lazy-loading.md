@@ -34,14 +34,14 @@ export class DocumentContent extends BaseModel { ... }
 
 **The critical insight:** for `Partial` and `Lazy` models, records exist in IndexedDB but their hydrated instances don't exist in the ObjectPool or in the heap. They only enter the heap when explicitly loaded.
 
-## LazyReferenceCollection
+## RefCollection
 
-Defined in `core/LazyCollection.ts`. Represents a one-to-many relationship where the **child holds the foreign key**.
+Defined in `core/LazyCollection.ts`. Runtime object backing both `@ReferenceCollection` (eager) and `@LazyReferenceCollection` (lazy). Represents a one-to-many relationship where the **child holds the foreign key**.
 
 Example: `Team.issues` — all Issues where `issue.teamId === team.id`.
 
 ```
-team.issues  ←  LazyReferenceCollection
+team.issues  ←  RefCollection
                   referencedModelName: "Issue"
                   inverseKey:          "teamId"
                   parentId:            "team-eng"
@@ -76,32 +76,32 @@ When a delta packet inserts a new Issue with `teamId: "team-eng"`, the engine do
 
 This keeps the delta-processing logic simple: it just updates the pool and IDB, and lets collections re-derive their state lazily.
 
-## LazyBackReference
+## BackRef
 
 Represents a one-to-one inverse relationship where the parent owns the child.
 
 Example: `issue.favorite` — find the Favorite record where `favorite.issueId === issue.id`.
 
 ```
-issue.favorite  ←  LazyBackReference
+issue.favorite  ←  BackRef
                     referencedModelName: "Favorite"
                     inverseOf:           "issueId"
                     parentId:            "issue-123"
                     value:               Favorite | null
 ```
 
-Like `LazyReferenceCollection`, loading it queries IDB and hydrates the result into the pool.
+Like `RefCollection`, loading it queries IDB and hydrates the result into the pool.
 
 The ownership relationship means cascade delete is built in: when the Issue is deleted, the engine automatically deletes the Favorite.
 
-## LazyOwnedCollection
+## OwnedRefs
 
-Represents a one-to-many relationship where the **parent stores the array of child IDs**.
+Backs both `@OwnedCollection` (eager) and `@LazyOwnedCollection` (lazy). Represents a one-to-many relationship where the **parent stores the array of child IDs**.
 
 Example: `team.memberIds: string[]` + `@OwnedCollection("User", { idsField: "memberIds" })` → `team.members`.
 
 ```
-team.members  ←  LazyOwnedCollection
+team.members  ←  OwnedRefs
                   referencedModelName: "User"
                   idsGetter:           () => team.memberIds   ← live, not a snapshot
 ```
@@ -142,21 +142,23 @@ The heap never shrinks. There's no eviction — once a Comment is loaded into th
 
 This is a deliberate trade-off: eviction requires cache invalidation logic (what if a comment in the pool gets stale?), and the complexity cost was deemed higher than the memory cost for typical usage patterns.
 
-## Eager Hydration (`lazy: false`)
+## Eager vs lazy — pick the decorator
 
-By default every relationship decorator is lazy — the runtime collection or referenced model is created Idle and only resolves on demand. Pass `lazy: false` to flip that:
+Each relationship has an eager and a lazy variant. The eager decorator (no prefix) loads alongside the parent during `makeModelObservable()`; the `@Lazy*` variant stays Idle until something explicitly asks for it.
 
 ```typescript
-@Reference("User", { lazy: false }) public assignee: User;
+// Eager — pulled into the pool when the parent hydrates
+@Reference("User") public assignee: User;
+@ReferenceCollection("Issue", { inverseOf: "teamId" }) public issues: RefCollection<Issue>;
+@OwnedCollection("Label", { idsField: "labelIds" }) public labels: OwnedRefs<Label>;
 
-@ReferenceCollection("Issue", { inverseOf: "teamId", lazy: false })
-public issues: LazyReferenceCollection<Issue>;
-
-@OwnedCollection("Label", { idsField: "labelIds", lazy: false })
-public labels: LazyOwnedCollection<Label>;
+// Lazy — load on demand
+@LazyReference("User") public reviewer: User;
+@LazyReferenceCollection("Comment", { inverseOf: "issueId" }) public comments: RefCollection<Comment>;
+@LazyOwnedCollection("Tag", { idsField: "tagIds" }) public tags: OwnedRefs<Tag>;
 ```
 
-When the parent is hydrated and `makeModelObservable()` runs, each non-lazy relationship fires its load immediately:
+When the parent is hydrated and `makeModelObservable()` runs, each eager relationship fires its load immediately:
 
 - `@Reference` → `storeManager.loadOne(referenceTo, id)` so accessors don't return `null` on first read.
 - `@ReferenceCollection` → `collection.load()` to pull all matching children into the pool.
@@ -164,9 +166,9 @@ When the parent is hydrated and `makeModelObservable()` runs, each non-lazy rela
 
 The kick-off is fire-and-forget — `makeModelObservable()` is synchronous, so observers re-render when each collection's state transitions to `Loaded`. Tests that need to await completion can call `await collection.load()`, which is idempotent and returns the in-flight Promise when one is already running.
 
-**Recursion is automatic.** A non-lazy `@ReferenceCollection` on `Owner` triggers `loadCollection` for the children → each child arrives via `objectPool.hydrateAndPut` → that calls the child's `makeModelObservable` → any non-lazy relationships *on the child* fire their own loads. The recursion is bounded because `hydrateAndPut` short-circuits when an instance is already in the pool, and `loadOne` short-circuits the same way.
+**Recursion is automatic.** An eager `@ReferenceCollection` on `Owner` triggers `loadCollection` for the children → each child arrives via `objectPool.hydrateAndPut` → that calls the child's `makeModelObservable` → any eager relationships *on the child* fire their own loads. The recursion is bounded because `hydrateAndPut` short-circuits when an instance is already in the pool, and `loadOne` short-circuits the same way.
 
-**When to use it.** Reach for `lazy: false` when a parent is useless without its children (a Document without its Blocks, an Order without its LineItems) and you want a single `await` to settle the whole subtree. Keep the default `lazy: true` for collections that are only sometimes opened (a Team's full Issue list when most pages only need a count).
+**When to use eager.** Reach for the eager decorator when a parent is useless without its children (a Document without its Blocks, an Order without its LineItems) and you want a single `await` to settle the whole subtree. Use `@Lazy*` for relationships that are only sometimes opened (a Team's full Issue list when most pages only need a count).
 
 ## The `usedForPartialIndexes` Flag
 
@@ -175,7 +177,7 @@ The kick-off is fire-and-forget — `makeModelObservable()` is synchronous, so o
 export class Issue extends BaseModel { ... }
 ```
 
-When this is `true`, the engine adds the model's ID to a `partialIndexValues` set on any LazyReferenceCollection that points at it. This allows the IDB query for those collections to use an index scan instead of a full table scan, even for partial models.
+When this is `true`, the engine adds the model's ID to a `partialIndexValues` set on any `RefCollection` that points at it. This allows the IDB query for those collections to use an index scan instead of a full table scan, even for partial models.
 
 In practice: if DocumentContent (Partial) references Issue (Instant, `usedForPartialIndexes: true`), then loading all DocumentContent for a given Issue uses an indexed IDB query rather than scanning the entire DocumentContent table.
 

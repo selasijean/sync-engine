@@ -21,7 +21,11 @@ import { MemoryAdapter } from "@sync-engine/MemoryAdapter";
 import { BaseModel } from "@sync-engine/BaseModel";
 import type { SSEClientFactory } from "@sync-engine/SyncConnection";
 import { TestLayeredDriver, addToPool } from "./fixtures";
-import { controllableSSEClient, makeFactory, sendMessage } from "./helpers/sseClient";
+import {
+  controllableSSEClient,
+  makeFactory,
+  sendMessage,
+} from "./helpers/sseClient";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -54,10 +58,7 @@ async function makeManager(
     .fn()
     .mockImplementation(async (_type, options) => {
       if (options?.syncGroups != null && opts.syncGroupFetcher != null) {
-        const models = await opts.syncGroupFetcher(
-          options.syncGroups,
-          options,
-        );
+        const models = await opts.syncGroupFetcher(options.syncGroups, options);
         return { lastSyncId: 0, subscribedSyncGroups: [], models };
       }
       return {
@@ -401,9 +402,7 @@ describe("activateSyncGroup() with fetch: false", () => {
 describe("activateSyncGroup() with ephemeral: true", () => {
   it("hydrates models into the pool and writes to IDB as usual", async () => {
     const syncGroupFetcher = vi.fn().mockResolvedValue({
-      TestLayeredDriver: [
-        { id: "d1", layerId: "layer-A", name: "Alpha" },
-      ],
+      TestLayeredDriver: [{ id: "d1", layerId: "layer-A", name: "Alpha" }],
     });
     manager = await makeManager({ syncGroupFetcher });
 
@@ -592,8 +591,12 @@ describe("evictByIndex()", () => {
 
     await manager.evictByIndex("TestLayeredDriver", "layerId", "layer-A");
 
-    expect(manager.objectPool.getById("TestLayeredDriver", "d1")).toBeUndefined();
-    expect(manager.objectPool.getById("TestLayeredDriver", "d2")).toBeUndefined();
+    expect(
+      manager.objectPool.getById("TestLayeredDriver", "d1"),
+    ).toBeUndefined();
+    expect(
+      manager.objectPool.getById("TestLayeredDriver", "d2"),
+    ).toBeUndefined();
     expect(manager.objectPool.getById("TestLayeredDriver", "d3")).toBeDefined();
     expect(
       await manager.database.readModel("TestLayeredDriver", "d1"),
@@ -616,9 +619,13 @@ describe("evictWhere()", () => {
 
     // Pool walk + IDB walk both match d1/d3 → counted twice (sum of both passes).
     expect(count).toBe(4);
-    expect(manager.objectPool.getById("TestLayeredDriver", "d1")).toBeUndefined();
+    expect(
+      manager.objectPool.getById("TestLayeredDriver", "d1"),
+    ).toBeUndefined();
     expect(manager.objectPool.getById("TestLayeredDriver", "d2")).toBeDefined();
-    expect(manager.objectPool.getById("TestLayeredDriver", "d3")).toBeUndefined();
+    expect(
+      manager.objectPool.getById("TestLayeredDriver", "d3"),
+    ).toBeUndefined();
     expect(
       await manager.database.readModel("TestLayeredDriver", "d1"),
     ).toBeNull();
@@ -670,9 +677,7 @@ describe("onSyncGroupDelete", () => {
       removedSyncGroups: ["layer-A"],
     });
 
-    await vi.waitFor(() =>
-      expect(onSyncGroupDelete).toHaveBeenCalledTimes(1),
-    );
+    await vi.waitFor(() => expect(onSyncGroupDelete).toHaveBeenCalledTimes(1));
     expect(onSyncGroupDelete).toHaveBeenCalledWith("layer-A", manager);
   });
 });

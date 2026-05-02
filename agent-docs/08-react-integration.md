@@ -71,9 +71,9 @@ const team = useModel<Team>("Team", teamId);
 const { items, isLoading, isLoaded, error, reload } = useCollection<Issue>(team?.issues);
 ```
 
-Wraps a `LazyReferenceCollection` (from `@ReferenceCollection`) or `LazyOwnedCollection` (from `@OwnedCollection`). Triggers `.load()` on mount if not already loaded, subscribes to collection invalidation, and re-loads when the collection is invalidated by a delta.
+Wraps a `RefCollection` (from `@ReferenceCollection` / `@LazyReferenceCollection`) or `OwnedRefs` (from `@OwnedCollection` / `@LazyOwnedCollection`). Triggers `.load()` on mount if not already loaded, subscribes to collection invalidation, and re-loads when the collection is invalidated by a delta.
 
-The collection is passed in as an argument (from the model instance), not by name. This means TypeScript knows the element type — `team.issues` is typed as `LazyReferenceCollection<Issue>`, so `items` is `Issue[]`.
+The collection is passed in as an argument (from the model instance), not by name. This means TypeScript knows the element type — `team.issues` is typed as `RefCollection<Issue>`, so `items` is `Issue[]`.
 
 **Use it when:** you want to display a collection that lives on a model instance — team's issues, user's assigned tasks, etc.
 
@@ -83,7 +83,7 @@ The collection is passed in as an argument (from the model instance), not by nam
 const { value: favorite, isLoading } = useBackRef<Favorite>(issue?.favorite);
 ```
 
-Same pattern as `useCollection`, but for `LazyBackReference` (from `@BackReference`). Returns a single item or null instead of an array.
+Same pattern as `useCollection`, but for `BackRef` (from `@BackReference`). Returns a single item or null instead of an array.
 
 ## useLazyCollection
 

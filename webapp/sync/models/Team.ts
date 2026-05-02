@@ -1,5 +1,5 @@
-import { BaseModel, ClientModel, Property, ReferenceCollection, LoadStrategy } from "sync-engine";
-import type { LazyReferenceCollection } from "sync-engine";
+import { BaseModel, ClientModel, Property, LazyReferenceCollection, LoadStrategy } from "sync-engine";
+import type { RefCollection } from "sync-engine";
 import type { Issue } from "./Issue";
 import { dateSerializer, dateDeserializer } from "./serializers";
 
@@ -17,6 +17,6 @@ export class Team extends BaseModel {
   @Property()
   public key = "";
 
-  @ReferenceCollection("Issue", { lazy: true })
-  public issues: LazyReferenceCollection<Issue>;
+  @LazyReferenceCollection("Issue")
+  public issues: RefCollection<Issue>;
 }

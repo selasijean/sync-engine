@@ -31,17 +31,17 @@ import {
   ClientModel,
   Property,
   Reference,
-  ReferenceCollection,
+  LazyReferenceCollection,
   LoadStrategy,
 } from "sync-engine";
-import type { LazyReferenceCollection } from "sync-engine";
+import type { RefCollection } from "sync-engine";
 
 @ClientModel({ loadStrategy: LoadStrategy.Instant })
 export class Team extends BaseModel {
   @Property() public name = "";
 
-  @ReferenceCollection("Issue", { inverseOf: "teamId" })
-  public issues: LazyReferenceCollection<Issue>;
+  @LazyReferenceCollection("Issue", { inverseOf: "teamId" })
+  public issues: RefCollection<Issue>;
 }
 
 @ClientModel({ loadStrategy: LoadStrategy.Instant })
@@ -58,9 +58,9 @@ export class Issue extends BaseModel {
 ```
 
 - `@Property` — persisted, observable field. `indexed: true` builds a secondary IndexedDB index on it.
-- `@Reference` — a foreign-key to another model. `issue.team` becomes a virtual getter that resolves the Team from the pool.
-- `@ReferenceCollection` — one-to-many where the foreign key lives on the child. Pass `lazy: false` to eagerly load alongside the parent (otherwise loads on demand).
-- `@OwnedCollection` — one-to-many where the parent stores the child IDs as an array.
+- `@Reference` / `@LazyReference` — foreign-key to another model. `issue.team` resolves the Team from the pool. `@Reference` eagerly pulls the target into the pool during hydration; `@LazyReference` is a sync getter that returns whatever is in the pool right now.
+- `@ReferenceCollection` / `@LazyReferenceCollection` — one-to-many where the foreign key lives on the child. Eager variant loads alongside the parent (recursively for nested eager collections); lazy variant stays Idle until `.load()` or `useCollection` subscribes.
+- `@OwnedCollection` / `@LazyOwnedCollection` — one-to-many where the parent stores the child IDs as an array. Same eager/lazy split.
 - `@BackReference` — single inverse relationship; deleting the owner cascades.
 - `loadStrategy` — `Instant` loads at bootstrap; `Lazy` / `Partial` / `ExplicitlyRequested` load on demand; `Ephemeral` stays in the pool only (never persisted).
 
@@ -151,7 +151,7 @@ const { value: favorite } = useBackRef(issue?.favorite);             // @BackRef
 const { value: doc } = useLazyRef<DocumentContent>("DocumentContent", issue?.id);
 ```
 
-By default a relationship loads when first accessed. To eagerly load alongside the parent — including recursively for nested non-lazy collections — pass `lazy: false`. See [`agent-docs/04-lazy-loading.md`](agent-docs/04-lazy-loading.md).
+Decorator names match Linear's convention: `@Reference` / `@ReferenceCollection` / `@OwnedCollection` are eager (loaded alongside the parent, recursively for nested eager collections), and the `@Lazy*` prefixed variants are loaded on demand. See [`agent-docs/04-lazy-loading.md`](agent-docs/04-lazy-loading.md).
 
 ## Headless quick start (Node, agents, workers)
 

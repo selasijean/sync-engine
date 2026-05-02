@@ -9,7 +9,11 @@ export {
   Property,
   EphemeralProperty,
   Reference,
+  LazyReference,
   ReferenceCollection,
+  LazyReferenceCollection,
+  OwnedCollection,
+  LazyOwnedCollection,
   BackReference,
   ReferenceArray,
   Action,
@@ -31,12 +35,9 @@ export type {
   StoreManagerConfig,
 } from "./StoreManager";
 
-// Lazy loading
-export {
-  LazyReferenceCollection,
-  LazyBackReference,
-  CollectionState,
-} from "./LazyCollection";
+// Collection runtime objects
+export { RefCollection, BackRef, CollectionState } from "./LazyCollection";
+export { OwnedRefs } from "./LazyOwnedCollection";
 
 // Transactions
 export {
@@ -57,7 +58,4 @@ export type {
   SyncMessageTransform,
 } from "./SyncConnection";
 export { ModelStream } from "./ModelStream";
-export type {
-  ModelUpdate,
-  ModelStreamMessageTransform,
-} from "./ModelStream";
+export type { ModelUpdate, ModelStreamMessageTransform } from "./ModelStream";

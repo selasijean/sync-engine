@@ -22,13 +22,15 @@ import {
   ClientModel,
   Property,
   Reference,
+  LazyReference,
   ReferenceCollection,
+  LazyReferenceCollection,
   OwnedCollection,
   BackReference,
 } from "@sync-engine/decorators";
 import { LoadStrategy } from "@sync-engine/types";
-import type { LazyReferenceCollection } from "@sync-engine/LazyCollection";
-import type { LazyOwnedCollection } from "@sync-engine/LazyOwnedCollection";
+import type { RefCollection } from "@sync-engine/LazyCollection";
+import type { OwnedRefs } from "@sync-engine/LazyOwnedCollection";
 const dateSerializer = (v: Date) => (v instanceof Date ? v.toISOString() : v);
 const dateDeserializer = (v: unknown) => new Date(v as string);
 import type { StoreManager } from "@sync-engine/StoreManager";
@@ -111,11 +113,11 @@ export class TestProject extends BaseModel {
   @Property({ indexed: true })
   public workspaceId = "";
 
-  @Reference("TestWorkspace", { onDelete: "cascade" })
+  @LazyReference("TestWorkspace", { onDelete: "cascade" })
   public workspace: TestWorkspace;
 
-  @ReferenceCollection("TestTask", { inverseOf: "projectId" })
-  public tasks: LazyReferenceCollection<TestTask>;
+  @LazyReferenceCollection("TestTask", { inverseOf: "projectId" })
+  public tasks: RefCollection<TestTask>;
 }
 
 // ── TestUser ──────────────────────────────────────────────────────────────────
@@ -149,14 +151,14 @@ export class TestTask extends BaseModel {
   @Property({ indexed: true })
   public projectId = "";
 
-  @Reference("TestProject", { onDelete: "cascade" })
+  @LazyReference("TestProject", { onDelete: "cascade" })
   public project: TestProject;
 
   /** Nullify: deleting the user clears this field instead of deleting the task. */
   @Property({ indexed: true })
   public assigneeId: string | null = null;
 
-  @Reference("TestUser", { nullable: true, onDelete: "nullify" })
+  @LazyReference("TestUser", { nullable: true, onDelete: "nullify" })
   public assignee: TestUser | null;
 }
 
@@ -171,7 +173,7 @@ export class TestComment extends BaseModel {
   @Property({ indexed: true })
   public taskId = "";
 
-  @Reference("TestTask", { onDelete: "restrict" })
+  @LazyReference("TestTask", { onDelete: "restrict" })
   public task: TestTask;
 }
 
@@ -188,7 +190,7 @@ export class TestActivity extends BaseModel {
   @Property({ indexed: true })
   public taskId = "";
 
-  @Reference("TestTask")
+  @LazyReference("TestTask")
   public task: TestTask;
 }
 
@@ -219,9 +221,9 @@ export class TestMetric extends BaseModel {
 // ── Eager hydration fixtures ──────────────────────────────────────────────────
 //
 // TestEagerOwner ──< TestEagerChild ──< TestEagerLeaf
-// Both ReferenceCollections are non-lazy (lazy: false) so when an Owner is
-// hydrated, its children load eagerly, and each child's leaves also load —
-// exercising recursive eager hydration through makeModelObservable.
+// `@ReferenceCollection` is the eager variant — when an Owner is hydrated,
+// its children load eagerly, and each child's leaves also load, exercising
+// recursive eager hydration through makeModelObservable.
 
 @ClientModel({ loadStrategy: LoadStrategy.Instant })
 export class TestEagerLeaf extends BaseModel {
@@ -240,11 +242,8 @@ export class TestEagerChild extends BaseModel {
   @Property({ indexed: true })
   public ownerId = "";
 
-  @ReferenceCollection("TestEagerLeaf", {
-    inverseOf: "childId",
-    lazy: false,
-  })
-  public leaves: LazyReferenceCollection<TestEagerLeaf>;
+  @ReferenceCollection("TestEagerLeaf", { inverseOf: "childId" })
+  public leaves: RefCollection<TestEagerLeaf>;
 }
 
 @ClientModel({ loadStrategy: LoadStrategy.Instant })
@@ -252,14 +251,11 @@ export class TestEagerOwner extends BaseModel {
   @Property()
   public name = "";
 
-  @ReferenceCollection("TestEagerChild", {
-    inverseOf: "ownerId",
-    lazy: false,
-  })
-  public children: LazyReferenceCollection<TestEagerChild>;
+  @ReferenceCollection("TestEagerChild", { inverseOf: "ownerId" })
+  public children: RefCollection<TestEagerChild>;
 }
 
-// TestEagerHolder exercises non-lazy @Reference and non-lazy @OwnedCollection.
+// TestEagerHolder exercises eager @Reference and eager @OwnedCollection.
 //
 //   refUserId  ──> TestUser     (eager Reference: pulled into the pool)
 //   leafIds[]  ──> TestEagerLeaf (eager OwnedCollection)
@@ -272,14 +268,14 @@ export class TestEagerHolder extends BaseModel {
   @Property({ indexed: true })
   public refUserId = "";
 
-  @Reference("TestUser", { idField: "refUserId", lazy: false })
+  @Reference("TestUser", { idField: "refUserId" })
   public refUser: TestUser;
 
   @Property()
   public leafIds: string[] = [];
 
-  @OwnedCollection("TestEagerLeaf", { idsField: "leafIds", lazy: false })
-  public ownedLeaves: LazyOwnedCollection<TestEagerLeaf>;
+  @OwnedCollection("TestEagerLeaf", { idsField: "leafIds" })
+  public ownedLeaves: OwnedRefs<TestEagerLeaf>;
 }
 
 @ClientModel({ loadStrategy: LoadStrategy.Instant })
@@ -290,7 +286,7 @@ export class TestNote extends BaseModel {
   @Property({ indexed: true })
   public taskId = "";
 
-  @Reference("TestTask")
+  @LazyReference("TestTask")
   public task: TestTask;
 
   /**

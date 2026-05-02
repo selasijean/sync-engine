@@ -107,7 +107,7 @@ describe("Eager ReferenceCollection hydration", () => {
 });
 
 describe("Eager @Reference hydration", () => {
-  it("pulls the referenced model into the pool when lazy: false", async () => {
+  it("pulls the referenced model into the pool when @Reference is eager", async () => {
     await manager.database.writeModels("TestUser", [
       { id: "u1", name: "Ada", email: "ada@example.com" },
     ]);
@@ -158,7 +158,7 @@ describe("Eager @Reference hydration", () => {
 });
 
 describe("Eager @OwnedCollection hydration", () => {
-  it("auto-loads owned items into the collection when lazy: false", async () => {
+  it("auto-loads owned items into the collection when @OwnedCollection is eager", async () => {
     await manager.database.writeModels("TestEagerLeaf", [
       { id: "l1", childId: "", label: "alpha" },
       { id: "l2", childId: "", label: "beta" },

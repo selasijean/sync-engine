@@ -108,7 +108,7 @@ Is this model already in the pool?
 
 After inserting, two things happen:
 - **Rebase:** If there's a pending `UpdateTransaction` for this model (unlikely on insert, but possible), rebase it against the new data.
-- **Invalidate collections:** Any `LazyReferenceCollection` or `LazyOwnedCollection` that this new instance would belong to is marked dirty. On next access, it re-loads and includes the new item.
+- **Invalidate collections:** Any `RefCollection` or `OwnedRefs` that this new instance would belong to is marked dirty. On next access, it re-loads and includes the new item.
 
 ### Update (`"U"`, `"V"`, `"C"`)
 

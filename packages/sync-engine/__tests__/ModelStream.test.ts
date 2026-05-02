@@ -322,7 +322,11 @@ describe("ModelStream", () => {
       pool.put("TestTask", task);
 
       const transform: ModelStreamMessageTransform = (raw) => {
-        const m = raw as { entity: string; id: string; fields: Record<string, unknown> };
+        const m = raw as {
+          entity: string;
+          id: string;
+          fields: Record<string, unknown>;
+        };
         return { modelName: m.entity, modelId: m.id, data: m.fields };
       };
 

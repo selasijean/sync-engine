@@ -9,7 +9,11 @@ import type {
   DeltaPacket,
   SyncMessageTransform,
 } from "@sync-engine/SyncConnection";
-import { controllableSSEClient, makeFactory, sendMessage } from "./helpers/sseClient";
+import {
+  controllableSSEClient,
+  makeFactory,
+  sendMessage,
+} from "./helpers/sseClient";
 
 // We test processDeltaPacket directly (private) to avoid needing a real EventSource.
 const process = (conn: SyncConnection, packet: DeltaPacket) =>

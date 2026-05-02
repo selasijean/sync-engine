@@ -14,7 +14,7 @@
  *
  * Collection invalidation:
  *   When models are inserted, deleted, or moved between parents, the
- *   affected LazyReferenceCollections are invalidated so they re-query
+ *   affected RefCollections are invalidated so they re-query
  *   the pool on next access.
  */
 
@@ -383,7 +383,7 @@ export class SyncConnection extends BaseSSEConnection {
   // =========================================================================
   // Collection invalidation
   //
-  // Instead of manually adding/removing items from LazyReferenceCollections,
+  // Instead of manually adding/removing items from RefCollections,
   // we invalidate the affected ones. On next access, they re-query the pool.
   // The ObjectPool.notify() on put/remove already triggers React re-renders.
   // =========================================================================
@@ -495,7 +495,7 @@ export class SyncConnection extends BaseSSEConnection {
     }
   }
 
-  /** Find the LazyReferenceCollections on a parent model and invalidate them. */
+  /** Find the RefCollections on a parent model and invalidate them. */
   private invalidateCollectionsOnParent(
     parentModelName: string,
     parentId: string,

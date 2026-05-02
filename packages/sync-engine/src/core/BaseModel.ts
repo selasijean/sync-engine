@@ -4,13 +4,13 @@
  * Lifecycle:
  *   1. `new Issue()`            — raw construction, observability OFF
  *   2. `issue.hydrate(data)`    — populate flat values, recursive for embedded objects
- *   3. `issue.makeModelObservable()` — create MobX boxes + LazyReferenceCollections
+ *   3. `issue.makeModelObservable()` — create MobX boxes + RefCollections
  *   4. `issue.title = "..."`    — setter fires, tracked in pendingChanges
  *   5. `issue.save()`           — builds transaction, auto-commits to server
  *
  * makeModelObservable() creates the runtime relationship objects:
- *   - LazyReferenceCollection for @ReferenceCollection properties
- *   - LazyBackReference for @BackReference properties
+ *   - RefCollection for @ReferenceCollection properties
+ *   - BackRef for @BackReference properties
  * These are stored on __collections and __backRefs, read by the decorator getters.
  */
 
@@ -21,12 +21,8 @@ import {
   type IObjectPool,
   type IStoreManager,
 } from "./types";
-import {
-  LazyCollectionBase,
-  LazyReferenceCollection,
-  LazyBackReference,
-} from "./LazyCollection";
-import { LazyOwnedCollection } from "./LazyOwnedCollection";
+import { LazyCollectionBase, RefCollection, BackRef } from "./LazyCollection";
+import { OwnedRefs } from "./LazyOwnedCollection";
 import {
   action,
   computed,
@@ -72,8 +68,8 @@ export class BaseModel {
   /** Runtime lazy collections, keyed by property name. */
   __collections: Record<string, LazyCollectionBase> = {};
 
-  /** Runtime LazyBackReferences, keyed by property name. Read by @BackReference getters. */
-  __backRefs: Record<string, LazyBackReference> = {};
+  /** Runtime BackRefs, keyed by property name. Read by @BackReference getters. */
+  __backRefs: Record<string, BackRef> = {};
 
   private pendingChanges = new Map<string, unknown>();
 
@@ -126,8 +122,8 @@ export class BaseModel {
   // ---------------------------------------------------------------------------
 
   makeModelObservable() {
-    // Idempotent: re-running would replace the LazyReferenceCollection /
-    // LazyBackReference / LazyOwnedCollection runtime objects, dropping
+    // Idempotent: re-running would replace the RefCollection /
+    // BackRef / OwnedRefs runtime objects, dropping
     // their loaded items, and re-fire any non-lazy eager loads.
     if (this.__observabilityEnabled) {
       return;
@@ -187,12 +183,12 @@ export class BaseModel {
           break;
         }
 
-        // ── ReferenceCollection → create LazyReferenceCollection ──
-        // e.g. Team.issues → LazyReferenceCollection("Issue", "teamId")
+        // ── ReferenceCollection → create RefCollection ──
+        // e.g. Team.issues → RefCollection("Issue", "teamId")
         // The collection's hydrate() stores the parent ID and computes
         // the partial index values for future IDB queries.
         case PropertyType.ReferenceCollection: {
-          const collection = new LazyReferenceCollection(
+          const collection = new RefCollection(
             prop.referenceTo!,
             prop.inverseOf!,
           );
@@ -222,13 +218,13 @@ export class BaseModel {
           break;
         }
 
-        // ── OwnedCollection → create LazyOwnedCollection ──
+        // ── OwnedCollection → create OwnedRefs ──
         // e.g. Team.issues where Team has issueIds: string[]
         // The idsGetter is a live function — reads the current array each time,
         // so additions/removals to issueIds are always reflected.
         case PropertyType.OwnedCollection: {
           const idsField = prop.idsField!;
-          const collection = new LazyOwnedCollection(
+          const collection = new OwnedRefs(
             prop.referenceTo!,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             () => ((this as any)[idsField] as string[]) ?? [],
@@ -248,13 +244,10 @@ export class BaseModel {
           break;
         }
 
-        // ── BackReference → create LazyBackReference ──
-        // e.g. Issue.favorite → LazyBackReference("Favorite", "issueId")
+        // ── BackReference → create BackRef ──
+        // e.g. Issue.favorite → BackRef("Favorite", "issueId")
         case PropertyType.BackReference: {
-          const backRef = new LazyBackReference(
-            prop.referenceTo!,
-            prop.inverseOf!,
-          );
+          const backRef = new BackRef(prop.referenceTo!, prop.inverseOf!);
           backRef.hydrate(this.id);
 
           if (BaseModel.storeManager != null) {
