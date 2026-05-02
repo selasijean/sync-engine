@@ -87,10 +87,9 @@ export interface BootstrapResponse {
   /** Server-side schema version. Mismatch with stored value → full bootstrap. */
   backendDatabaseVersion?: number;
   /**
-   * Record IDs deleted since the client's lastSyncId, grouped by model name.
-   * Only present on full bootstrap requests that include a `since` param
-   * (i.e. deferred model phase 2). Lets the client evict deleted records
-   * without needing clearModelStore.
+   * Tombstones for records the client may already have but the server has
+   * since deleted, grouped by model name. Safe to omit when the client has
+   * no prior state (e.g. first-time full bootstrap).
    */
   deletedIds?: Record<string, string[]>;
 }
@@ -479,11 +478,15 @@ export class StoreManager {
             : Promise.resolve();
         }),
       );
+      await this.applyDeletedIds(res);
 
       this.setPhase(BootstrapPhase.Hydrating, `${this.objectPool.size} models`);
       await this.database.saveMeta({
         lastSyncId: res.lastSyncId,
-        subscribedSyncGroups: res.subscribedSyncGroups,
+        subscribedSyncGroups: StoreManager.mergeSubscribedGroups(
+          this.database.currentMeta?.subscribedSyncGroups,
+          res.subscribedSyncGroups,
+        ),
         schemaHash: ModelRegistry.schemaHash,
         dbVersion: this.database.currentMeta?.dbVersion ?? 1,
         backendDatabaseVersion: res.backendDatabaseVersion ?? 0,
@@ -520,11 +523,15 @@ export class StoreManager {
             : Promise.resolve();
         }),
       );
+      await this.applyDeletedIds(res);
 
       this.setPhase(BootstrapPhase.Hydrating, `${this.objectPool.size} models`);
       await this.database.saveMeta({
         lastSyncId: res.lastSyncId,
-        subscribedSyncGroups: res.subscribedSyncGroups,
+        subscribedSyncGroups: StoreManager.mergeSubscribedGroups(
+          this.database.currentMeta?.subscribedSyncGroups,
+          res.subscribedSyncGroups,
+        ),
         schemaHash: ModelRegistry.schemaHash,
         dbVersion: this.database.currentMeta?.dbVersion ?? 1,
         backendDatabaseVersion: res.backendDatabaseVersion ?? 0,
@@ -553,12 +560,9 @@ export class StoreManager {
       await Promise.all(
         Object.entries(res.models).map(async ([name, records]) => {
           await this.database.writeModelsIfAbsent(name, records);
-          const deletedIds = res.deletedIds?.[name];
-          if (deletedIds != null && deletedIds.length > 0) {
-            await this.database.deleteModels(name, deletedIds);
-          }
         }),
       );
+      await this.applyDeletedIds(res);
       const meta = this.database.currentMeta;
       if (meta != null && res.lastSyncId > meta.lastSyncId) {
         meta.lastSyncId = res.lastSyncId;
@@ -568,6 +572,38 @@ export class StoreManager {
       // Deferred fetch failure is non-fatal — models load on demand later.
       // Surface to onError so adopters can monitor.
       this.emitError(err, { kind: "deferredBootstrap", modelNames });
+    }
+  }
+
+  /** Append-only merge: bootstrap responses never shrink the subscription set. */
+  private static mergeSubscribedGroups(
+    existing: string[] | undefined,
+    fromResponse: string[],
+  ): string[] {
+    return [...new Set([...(existing ?? []), ...fromResponse])];
+  }
+
+  /**
+   * Evict tombstones from IDB (skipping Ephemeral models) and the pool.
+   * Run AFTER the upsert pass — if an id is in both `res.models` and
+   * `res.deletedIds` the tombstone wins (server's delete is authoritative).
+   * Cascade/invalidate are skipped; those flow via SSE D actions.
+   */
+  private async applyDeletedIds(res: BootstrapResponse): Promise<void> {
+    if (res.deletedIds == null) {
+      return;
+    }
+    for (const [modelName, ids] of Object.entries(res.deletedIds)) {
+      if (ids.length === 0) {
+        continue;
+      }
+      const meta = ModelRegistry.getModelMeta(modelName);
+      if (meta?.loadStrategy !== LoadStrategy.Ephemeral) {
+        await this.database.deleteModels(modelName, ids);
+      }
+      for (const id of ids) {
+        this.objectPool.remove(modelName, id);
+      }
     }
   }
 
@@ -630,10 +666,10 @@ export class StoreManager {
         }
       }
     }
+    await this.applyDeletedIds(res);
     await this.database.saveMeta({
       ...existing,
       lastSyncId: res.lastSyncId,
-      subscribedSyncGroups: res.subscribedSyncGroups,
       schemaHash: ModelRegistry.schemaHash,
       dbVersion: existing.dbVersion ?? 1,
       backendDatabaseVersion:
@@ -957,6 +993,7 @@ export class StoreManager {
         this.hydrateInstantModels(modelName, records);
       }),
     );
+    await this.applyDeletedIds(res);
 
     // Don't touch dbMeta.lastSyncId. It's a *global* checkpoint — the highest
     // syncId for which we've applied every event across every subscribed group.
