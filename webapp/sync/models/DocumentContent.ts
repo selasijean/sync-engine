@@ -3,7 +3,7 @@ import type { Issue } from "./Issue";
 
 @ClientModel({ loadStrategy: LoadStrategy.Partial })
 export class DocumentContent extends BaseModel {
-  @Property({ lazy: true })
+  @Property()
   public content = "";
 
   @Property({ indexed: true })
