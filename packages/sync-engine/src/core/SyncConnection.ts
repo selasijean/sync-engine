@@ -1,12 +1,15 @@
 /**
  * SyncConnection — WebSocket for receiving delta packets from the server.
  *
- * Delta packet processing (7 steps):
- *   1. Handle sync group changes
- *   4. Apply sync actions → IndexedDB (the ONLY way model tables get updated)
- *   5. Apply sync actions → in-memory ObjectPool + rebase + cascade + invalidate
- *   6. Update lastSyncId
- *   7. Resolve transactions waiting for this syncId
+ * Delta packet processing:
+ *   1. Handle sync group changes (idempotent — triggers authoritative refetch)
+ *   2. Apply sync actions → IndexedDB (the ONLY way model tables get updated)
+ *   3. Apply sync actions → in-memory ObjectPool + rebase + cascade + invalidate
+ *   4. Advance lastSyncId
+ *   5. Resolve transactions waiting for this syncId
+ *
+ * Stale packets (syncId <= lastSyncId) skip steps 2-4: re-applying would
+ * clobber any newer state already in the pool. Group changes still run.
  *
  * Cascade delete (from BackReference metadata):
  *   When a model is deleted, find all BackReferences pointing to it and
@@ -167,11 +170,10 @@ export class SyncConnection extends BaseSSEConnection {
       }
     }
 
-    // Stale packets (syncId <= lastSyncId): group changes above are idempotent
-    // (refetches authoritative state). syncActions would clobber newer pool state.
+    // Stale packets (syncId <= lastSyncId): these actions would clobber newer pool state.
     const advanced = packet.syncId > meta.lastSyncId;
     if (advanced) {
-      // Step 4: apply to IndexedDB (server is SSOT — IDB mirrors it)
+      // Step 2: apply to IndexedDB (server is SSOT — IDB mirrors it)
       for (const action of packet.syncActions) {
         const actionMeta = ModelRegistry.getModelMeta(action.modelName);
         if (actionMeta?.loadStrategy === LoadStrategy.Ephemeral) {
@@ -189,11 +191,12 @@ export class SyncConnection extends BaseSSEConnection {
         }
       }
 
-      // Step 5: apply to in-memory + rebase + cascade + invalidate
+      // Step 3: apply to in-memory + rebase + cascade + invalidate
       for (const action of packet.syncActions) {
         this.applySyncAction(action);
       }
 
+      // Step 4: advance lastSyncId
       meta.lastSyncId = packet.syncId;
     }
 
@@ -201,7 +204,7 @@ export class SyncConnection extends BaseSSEConnection {
       await this.database.saveMeta(meta);
     }
 
-    // Step 7: resolve transactions
+    // Step 5: resolve transactions
     this.queue.resolveBySync(packet.syncId);
 
     this.onPacket?.(packet);

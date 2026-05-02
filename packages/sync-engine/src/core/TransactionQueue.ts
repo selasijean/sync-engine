@@ -270,6 +270,10 @@ export class TransactionQueue {
   // ── Sync completion (called by SyncConnection on delta packet) ────────────
 
   resolveBySync(receivedSyncId: number): BaseTransaction[] {
+    if (this.awaitingSync.length === 0) {
+      return [];
+    }
+
     const resolved: BaseTransaction[] = [];
     const remaining: BaseTransaction[] = [];
 

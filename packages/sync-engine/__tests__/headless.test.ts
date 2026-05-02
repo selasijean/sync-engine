@@ -22,6 +22,7 @@ import {
   type SSEClient,
   type SSEClientFactory,
 } from "@sync-engine/SyncConnection";
+import { makeSyncConnection } from "./helpers/makeSyncConnection";
 import { BaseModel } from "@sync-engine/BaseModel";
 import { Database, type StorageAdapter } from "@sync-engine/Database";
 import { MemoryAdapter } from "@sync-engine/MemoryAdapter";
@@ -48,7 +49,12 @@ async function makeAgent(adapter?: StorageAdapter) {
   });
   const pool = new ObjectPool();
   const queue = new TransactionQueue(storage, pool);
-  const conn = new SyncConnection("http://x/events", storage, pool, queue);
+  const conn = makeSyncConnection({
+    url: "http://x/events",
+    db: storage,
+    pool,
+    queue,
+  });
   return { storage, pool, queue, conn };
 }
 
@@ -151,16 +157,13 @@ describe("Custom sseClientFactory", () => {
 
     const pool = new ObjectPool();
     const queue = new TransactionQueue(db, pool);
-    const conn = new SyncConnection(
-      "http://node-agent:8081/api/events",
+    const conn = makeSyncConnection({
+      url: "http://node-agent:8081/api/events",
       db,
       pool,
       queue,
-      undefined,
-      undefined,
-      undefined,
-      factory,
-    );
+      sseClientFactory: factory,
+    });
 
     conn.connect();
 
@@ -189,16 +192,12 @@ describe("Custom sseClientFactory", () => {
 
     const pool = new ObjectPool();
     const queue = new TransactionQueue(db, pool);
-    const conn = new SyncConnection(
-      "http://x/events",
+    const conn = makeSyncConnection({
       db,
       pool,
       queue,
-      undefined,
-      undefined,
-      undefined,
-      factory,
-    );
+      sseClientFactory: factory,
+    });
 
     conn.connect();
     conn.disconnect();

@@ -14,6 +14,7 @@ import {
   makeFactory,
   sendMessage,
 } from "./helpers/sseClient";
+import { makeSyncConnection } from "./helpers/makeSyncConnection";
 
 // We test processDeltaPacket directly (private) to avoid needing a real EventSource.
 const process = (conn: SyncConnection, packet: DeltaPacket) =>
@@ -41,7 +42,7 @@ beforeEach(async () => {
 
   pool = new ObjectPool();
   queue = new TransactionQueue(db, pool);
-  conn = new SyncConnection("http://localhost/events", db, pool, queue);
+  conn = makeSyncConnection({ db, pool, queue });
 });
 
 afterEach(async () => {
@@ -156,7 +157,7 @@ describe("SyncConnection", () => {
 
   // ── Stale packet handling ─────────────────────────────────────────────────
 
-  describe("replay/stale packets (syncId <= lastSyncId)", () => {
+  describe("stale packets (replay)", () => {
     beforeEach(async () => {
       const baseline = await db.loadMeta();
       baseline!.lastSyncId = 50;
@@ -205,14 +206,7 @@ describe("SyncConnection", () => {
 
     it("still processes sync-group changes on a stale packet", async () => {
       const onSyncGroupsChanged = vi.fn().mockResolvedValue(undefined);
-      const c = new SyncConnection(
-        "http://localhost/events",
-        db,
-        pool,
-        queue,
-        undefined,
-        onSyncGroupsChanged,
-      );
+      const c = makeSyncConnection({ db, pool, queue, onSyncGroupsChanged });
 
       await process(c, {
         syncId: 10,
@@ -230,13 +224,7 @@ describe("SyncConnection", () => {
     it("still fires onPacket and resolveBySync on a stale packet", async () => {
       const resolveSpy = vi.spyOn(queue, "resolveBySync");
       const onPacket = vi.fn();
-      const c = new SyncConnection(
-        "http://localhost/events",
-        db,
-        pool,
-        queue,
-        onPacket,
-      );
+      const c = makeSyncConnection({ db, pool, queue, onPacket });
 
       const stalePacket: DeltaPacket = {
         syncId: 10,
@@ -512,16 +500,13 @@ describe("SyncConnection", () => {
 
     beforeEach(() => {
       loadedCollections = new Set<string>();
-      connWithChecker = new SyncConnection(
-        "http://localhost/events",
+      connWithChecker = makeSyncConnection({
         db,
         pool,
         queue,
-        undefined,
-        undefined,
-        (modelName, indexKey, value) =>
+        isCollectionLoaded: (modelName, indexKey, value) =>
           loadedCollections.has(`${modelName}:${indexKey}:${value}`),
-      );
+      });
     });
 
     afterEach(() => {
@@ -664,17 +649,13 @@ describe("SyncConnection", () => {
       };
 
       const client = controllableSSEClient();
-      const c = new SyncConnection(
-        "http://localhost/events",
+      const c = makeSyncConnection({
         db,
         pool,
         queue,
-        undefined,
-        undefined,
-        undefined,
-        makeFactory(client),
+        sseClientFactory: makeFactory(client),
         transform,
-      );
+      });
       c.connect();
 
       sendMessage(client, {
@@ -713,17 +694,13 @@ describe("SyncConnection", () => {
       };
 
       const client = controllableSSEClient();
-      const c = new SyncConnection(
-        "http://localhost/events",
+      const c = makeSyncConnection({
         db,
         pool,
         queue,
-        undefined,
-        undefined,
-        undefined,
-        makeFactory(client),
+        sseClientFactory: makeFactory(client),
         transform,
-      );
+      });
       c.connect();
 
       sendMessage(client, [
@@ -743,17 +720,13 @@ describe("SyncConnection", () => {
       const transform: SyncMessageTransform = (raw) => raw as DeltaPacket;
 
       const client = controllableSSEClient();
-      const c = new SyncConnection(
-        "http://localhost/events",
+      const c = makeSyncConnection({
         db,
         pool,
         queue,
-        undefined,
-        undefined,
-        undefined,
-        makeFactory(client),
+        sseClientFactory: makeFactory(client),
         transform,
-      );
+      });
       c.connect();
 
       const packet: DeltaPacket = {
@@ -780,17 +753,13 @@ describe("SyncConnection", () => {
       const transform: SyncMessageTransform = () => null;
 
       const client = controllableSSEClient();
-      const c = new SyncConnection(
-        "http://localhost/events",
+      const c = makeSyncConnection({
         db,
         pool,
         queue,
-        undefined,
-        undefined,
-        undefined,
-        makeFactory(client),
+        sseClientFactory: makeFactory(client),
         transform,
-      );
+      });
       c.connect();
 
       sendMessage(client, {
