@@ -919,11 +919,17 @@ export class StoreManager {
   }
 
   /**
-   * Deactivate a sync group: evict its models from the pool and IDB, update
-   * the subscribed groups list, and reconnect SSE so the server stops streaming
-   * deltas for this group.
+   * Deactivate a sync group: drop it from the subscribed list and reconnect
+   * SSE so the server stops streaming deltas for it.
    *
-   * Only models that declare syncGroupField via @ClientModel are evicted.
+   * Does NOT evict already-loaded records. If you want them gone, clear them
+   * yourself after this returns:
+   *
+   *   await sm.deactivateSyncGroup("ws-1");
+   *   for (const m of sm.objectPool.getAll("Issue")) {
+   *     if (m.workspaceId === "ws-1") sm.objectPool.remove("Issue", m.id);
+   *   }
+   *   await sm.database.deleteModelsByIndex("Issue", "workspaceId", "ws-1");
    *
    * Idempotent — does nothing if the group is not currently active.
    */
@@ -934,50 +940,15 @@ export class StoreManager {
     }
 
     const ids = Array.isArray(groupId) ? groupId : [groupId];
-    const groupsToEvict = new Set(
+    const toRemove = new Set(
       ids.filter((id) => dbMeta.subscribedSyncGroups.includes(id)),
     );
-    if (groupsToEvict.size === 0) {
+    if (toRemove.size === 0) {
       return;
     }
 
-    // Pool eviction is synchronous — do it first before any awaits.
-    for (const modelMeta of ModelRegistry.allModels()) {
-      const field = modelMeta.syncGroupField;
-      if (field == null) {
-        continue;
-      }
-      const toEvict = this.objectPool
-        .getAll(modelMeta.name)
-        .filter((m) => groupsToEvict.has(prop(m, field) as string));
-      for (const m of toEvict) {
-        this.objectPool.remove(modelMeta.name, m.id);
-        this.loadedIds.delete(StoreManager.modelIdKey(modelMeta.name, m.id));
-      }
-      for (const id of groupsToEvict) {
-        this.loadedCollections.delete(
-          StoreManager.collectionKey(modelMeta.name, field, id),
-        );
-      }
-    }
-
-    // IDB eviction — parallel across models and group IDs.
-    await Promise.all(
-      ModelRegistry.allModels()
-        .filter((modelMeta) => modelMeta.syncGroupField != null)
-        .flatMap((modelMeta) =>
-          [...groupsToEvict].map((id) =>
-            this.database.deleteModelsByIndex(
-              modelMeta.name,
-              modelMeta.syncGroupField!,
-              id,
-            ),
-          ),
-        ),
-    );
-
     dbMeta.subscribedSyncGroups = dbMeta.subscribedSyncGroups.filter(
-      (g) => !groupsToEvict.has(g),
+      (g) => !toRemove.has(g),
     );
     await this.database.saveMeta(dbMeta);
     this.syncConnection?.reconnect();

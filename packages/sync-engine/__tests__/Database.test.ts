@@ -150,7 +150,7 @@ describe("Database", () => {
 
   describe("deleteModelsByIndex()", () => {
     it("deletes records matching the index value (IDB index path)", async () => {
-      // TestLayeredDriver has syncGroupField: "layerId" → real IDB index exists
+      // TestLayeredDriver.layerId has indexed: true → real IDB index exists
       await db.writeModels("TestLayeredDriver", [
         { id: "d1", layerId: "layer-A", name: "Alpha" },
         { id: "d2", layerId: "layer-A", name: "Beta" },

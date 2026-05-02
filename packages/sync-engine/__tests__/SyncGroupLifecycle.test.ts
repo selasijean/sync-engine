@@ -2,15 +2,9 @@
  * Tests for activateSyncGroup() and deactivateSyncGroup() on StoreManager.
  *
  * These methods let the app programmatically add/remove sync group subscriptions
- * at runtime — the primary use case being layer switching, where only a bounded
- * number of layers are held in memory at once.
- *
- * Test models used:
- *   TestLayeredDriver  — LoadStrategy.Instant, syncGroupField: "layerId"
- *   TestScopelessItem  — LoadStrategy.Instant, no syncGroupField
- *
- * Most tests use MemoryAdapter to avoid real IDB overhead. The auto-indexing
- * test uses a real Database to verify the IDB index is created.
+ * at runtime. deactivateSyncGroup is unsubscribe-only: it removes the group from
+ * meta and reconnects SSE, but does not evict already-loaded data. Callers that
+ * need eviction do it explicitly via objectPool.remove + database.deleteModelsByIndex.
  */
 
 import {
@@ -24,10 +18,9 @@ import {
 } from "vitest";
 import { StoreManager } from "@sync-engine/StoreManager";
 import { MemoryAdapter } from "@sync-engine/MemoryAdapter";
-import { Database } from "@sync-engine/Database";
 import { BaseModel } from "@sync-engine/BaseModel";
 import type { SSEClientFactory } from "@sync-engine/SyncConnection";
-import { TestLayeredDriver, TestScopelessItem, addToPool } from "./fixtures";
+import { TestLayeredDriver, addToPool } from "./fixtures";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -412,132 +405,25 @@ describe("activateSyncGroup() with ephemeral: true", () => {
     expect(urls[urls.length - 1]).toContain("layer-A");
   });
 
-  it("deactivate removes ephemeral group from pool and meta", async () => {
-    const syncGroupFetcher = vi.fn().mockResolvedValue({
-      TestLayeredDriver: [
-        { id: "d1", layerId: "layer-A", name: "Alpha" },
-      ],
-    });
+  it("deactivate clears the ephemeral group from meta", async () => {
+    const syncGroupFetcher = vi.fn().mockResolvedValue({});
     manager = await makeManager({ syncGroupFetcher });
 
     await manager.activateSyncGroup("layer-A", { ephemeral: true });
-    expect(manager.objectPool.getById("TestLayeredDriver", "d1")).toBeDefined();
+    expect(manager.database.currentMeta?.subscribedSyncGroups).toContain(
+      "layer-A",
+    );
 
     await manager.deactivateSyncGroup("layer-A");
-    expect(
-      manager.objectPool.getById("TestLayeredDriver", "d1"),
-    ).toBeUndefined();
     expect(manager.database.currentMeta?.subscribedSyncGroups).not.toContain(
       "layer-A",
     );
-  });
-
-  it("mixed persisted and ephemeral groups deactivate correctly", async () => {
-    const syncGroupFetcher = vi.fn().mockResolvedValue({
-      TestLayeredDriver: [],
-    });
-    manager = await makeManager({ syncGroupFetcher });
-
-    await manager.activateSyncGroup("layer-A", { ephemeral: false });
-    await manager.activateSyncGroup("layer-B", { ephemeral: true });
-    await seedLayer(manager, "layer-A", ["d-a"]);
-    await seedLayer(manager, "layer-B", ["d-b"]);
-
-    await manager.deactivateSyncGroup(["layer-A", "layer-B"]);
-
-    expect(
-      manager.objectPool.getById("TestLayeredDriver", "d-a"),
-    ).toBeUndefined();
-    expect(
-      manager.objectPool.getById("TestLayeredDriver", "d-b"),
-    ).toBeUndefined();
-    // layer-A was persisted, so its IDB records should be cleaned up
-    expect(
-      await manager.database.readModel("TestLayeredDriver", "d-a"),
-    ).toBeNull();
   });
 });
 
 // ── deactivateSyncGroup() ─────────────────────────────────────────────────────
 
 describe("deactivateSyncGroup()", () => {
-  it("removes models for the target group from the pool", async () => {
-    manager = await makeManager({ initialGroups: ["layer-A"] });
-    await seedLayer(manager, "layer-A", ["d1", "d2"]);
-
-    await manager.deactivateSyncGroup("layer-A");
-
-    expect(
-      manager.objectPool.getById("TestLayeredDriver", "d1"),
-    ).toBeUndefined();
-    expect(
-      manager.objectPool.getById("TestLayeredDriver", "d2"),
-    ).toBeUndefined();
-  });
-
-  it("does not remove models that belong to other groups", async () => {
-    manager = await makeManager({ initialGroups: ["layer-A", "layer-B"] });
-    await seedLayer(manager, "layer-A", ["d-a"]);
-    await seedLayer(manager, "layer-B", ["d-b"]);
-
-    await manager.deactivateSyncGroup("layer-A");
-
-    expect(
-      manager.objectPool.getById("TestLayeredDriver", "d-a"),
-    ).toBeUndefined();
-    expect(
-      manager.objectPool.getById("TestLayeredDriver", "d-b"),
-    ).toBeDefined();
-  });
-
-  it("leaves models without syncGroupField untouched", async () => {
-    manager = await makeManager({ initialGroups: ["layer-A"] });
-    await seedLayer(manager, "layer-A", ["d1"]);
-
-    // Seed a TestScopelessItem — it has a layerId field but no syncGroupField
-    const item = new TestScopelessItem();
-    item.hydrate({ id: "item-1", label: "Untouched", layerId: "layer-A" });
-    addToPool(manager, "TestScopelessItem", item);
-
-    await manager.deactivateSyncGroup("layer-A");
-
-    expect(
-      manager.objectPool.getById("TestLayeredDriver", "d1"),
-    ).toBeUndefined();
-    expect(
-      manager.objectPool.getById("TestScopelessItem", "item-1"),
-    ).toBeDefined();
-  });
-
-  it("removes models for the target group from IDB", async () => {
-    manager = await makeManager({ initialGroups: ["layer-A"] });
-    await seedLayer(manager, "layer-A", ["d1", "d2"]);
-
-    await manager.deactivateSyncGroup("layer-A");
-
-    expect(
-      await manager.database.readModel("TestLayeredDriver", "d1"),
-    ).toBeNull();
-    expect(
-      await manager.database.readModel("TestLayeredDriver", "d2"),
-    ).toBeNull();
-  });
-
-  it("does not remove IDB records for other groups", async () => {
-    manager = await makeManager({ initialGroups: ["layer-A", "layer-B"] });
-    await seedLayer(manager, "layer-A", ["d-a"]);
-    await seedLayer(manager, "layer-B", ["d-b"]);
-
-    await manager.deactivateSyncGroup("layer-A");
-
-    expect(
-      await manager.database.readModel("TestLayeredDriver", "d-a"),
-    ).toBeNull();
-    expect(
-      await manager.database.readModel("TestLayeredDriver", "d-b"),
-    ).not.toBeNull();
-  });
-
   it("removes the groupId from meta.subscribedSyncGroups", async () => {
     manager = await makeManager({ initialGroups: ["layer-A", "layer-B"] });
 
@@ -551,11 +437,22 @@ describe("deactivateSyncGroup()", () => {
     );
   });
 
+  it("does not evict already-loaded data — eviction is the caller's responsibility", async () => {
+    manager = await makeManager({ initialGroups: ["layer-A"] });
+    await seedLayer(manager, "layer-A", ["d1"]);
+
+    await manager.deactivateSyncGroup("layer-A");
+
+    expect(manager.objectPool.getById("TestLayeredDriver", "d1")).toBeDefined();
+    expect(
+      await manager.database.readModel("TestLayeredDriver", "d1"),
+    ).not.toBeNull();
+  });
+
   it("is a no-op if the group is not currently subscribed", async () => {
     manager = await makeManager({ initialGroups: [] });
-    await seedLayer(manager, "layer-A", ["d1"]); // seed data even though not subscribed
+    await seedLayer(manager, "layer-A", ["d1"]);
 
-    // Should not throw and should not touch data
     await expect(manager.deactivateSyncGroup("layer-A")).resolves.not.toThrow();
     expect(manager.objectPool.getById("TestLayeredDriver", "d1")).toBeDefined();
   });
@@ -588,39 +485,19 @@ describe("deactivateSyncGroup()", () => {
 describe("deactivateSyncGroup() with array input", () => {
   it("deactivates multiple groups in one call", async () => {
     manager = await makeManager({ initialGroups: ["layer-A", "layer-B"] });
-    await seedLayer(manager, "layer-A", ["d-a"]);
-    await seedLayer(manager, "layer-B", ["d-b"]);
 
     await manager.deactivateSyncGroup(["layer-A", "layer-B"]);
 
-    expect(
-      manager.objectPool.getById("TestLayeredDriver", "d-a"),
-    ).toBeUndefined();
-    expect(
-      manager.objectPool.getById("TestLayeredDriver", "d-b"),
-    ).toBeUndefined();
     expect(manager.database.currentMeta?.subscribedSyncGroups).toHaveLength(0);
   });
 
-  it("only evicts models for the specified groups", async () => {
+  it("only deactivates the specified groups", async () => {
     manager = await makeManager({
       initialGroups: ["layer-A", "layer-B", "layer-C"],
     });
-    await seedLayer(manager, "layer-A", ["d-a"]);
-    await seedLayer(manager, "layer-B", ["d-b"]);
-    await seedLayer(manager, "layer-C", ["d-c"]);
 
     await manager.deactivateSyncGroup(["layer-A", "layer-B"]);
 
-    expect(
-      manager.objectPool.getById("TestLayeredDriver", "d-a"),
-    ).toBeUndefined();
-    expect(
-      manager.objectPool.getById("TestLayeredDriver", "d-b"),
-    ).toBeUndefined();
-    expect(
-      manager.objectPool.getById("TestLayeredDriver", "d-c"),
-    ).toBeDefined();
     expect(manager.database.currentMeta?.subscribedSyncGroups).toEqual([
       "layer-C",
     ]);
@@ -628,15 +505,12 @@ describe("deactivateSyncGroup() with array input", () => {
 
   it("skips IDs that are not currently subscribed", async () => {
     manager = await makeManager({ initialGroups: ["layer-A"] });
-    await seedLayer(manager, "layer-A", ["d-a"]);
 
     await expect(
       manager.deactivateSyncGroup(["layer-A", "layer-X"]),
     ).resolves.not.toThrow();
 
-    expect(
-      manager.objectPool.getById("TestLayeredDriver", "d-a"),
-    ).toBeUndefined();
+    expect(manager.database.currentMeta?.subscribedSyncGroups).toEqual([]);
   });
 });
 
@@ -653,59 +527,9 @@ describe("activate → deactivate → reactivate roundtrip", () => {
     expect(manager.objectPool.getById("TestLayeredDriver", "d1")).toBeDefined();
 
     await manager.deactivateSyncGroup("layer-A");
-    expect(
-      manager.objectPool.getById("TestLayeredDriver", "d1"),
-    ).toBeUndefined();
-
     await manager.activateSyncGroup("layer-A");
-    expect(manager.objectPool.getById("TestLayeredDriver", "d1")).toBeDefined();
 
-    // Fetcher called on first activate and again after reactivation — not on deactivate
+    // Fetcher called on first activate and again after reactivation
     expect(syncGroupFetcher).toHaveBeenCalledTimes(2);
-  });
-
-  it("pool and IDB are clean between deactivation and reactivation", async () => {
-    const syncGroupFetcher = vi.fn().mockResolvedValue({
-      TestLayeredDriver: [{ id: "d1", layerId: "layer-A", name: "Driver" }],
-    });
-    manager = await makeManager({ syncGroupFetcher });
-
-    await manager.activateSyncGroup("layer-A");
-    await manager.deactivateSyncGroup("layer-A");
-
-    // Verify clean state before reactivation
-    expect(
-      manager.objectPool.getById("TestLayeredDriver", "d1"),
-    ).toBeUndefined();
-    expect(
-      await manager.database.readModel("TestLayeredDriver", "d1"),
-    ).toBeNull();
-  });
-});
-
-// ── syncGroupField implies auto-indexing ──────────────────────────────────────
-
-describe("syncGroupField auto-indexing in IDB", () => {
-  it("creates an IDB index for syncGroupField even when @Property has no indexed: true", async () => {
-    const db = new Database(crypto.randomUUID());
-    await db.connect();
-
-    // readModelsByIndex uses the IDB index when available.
-    // Seed two drivers in different layers, then query by layerId.
-    await db.writeModels("TestLayeredDriver", [
-      { id: "d1", layerId: "layer-A", name: "Alpha" },
-      { id: "d2", layerId: "layer-B", name: "Beta" },
-    ]);
-
-    const results = await db.readModelsByIndex(
-      "TestLayeredDriver",
-      "layerId",
-      "layer-A",
-    );
-
-    expect(results).toHaveLength(1);
-    expect(results[0].id).toBe("d1");
-
-    await db.destroy();
   });
 });

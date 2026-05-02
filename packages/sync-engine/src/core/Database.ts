@@ -284,18 +284,10 @@ export class Database implements StorageAdapter {
     const store = db.createObjectStore(modelName, { keyPath: "id" });
     const meta = ModelRegistry.getModelMeta(modelName);
     if (meta != null) {
-      const created = new Set<string>();
       for (const [propName, propMeta] of meta.properties) {
         if (propMeta.indexed === true) {
           store.createIndex(propName, propName, { unique: false });
-          created.add(propName);
         }
-      }
-      // syncGroupField is implicitly indexed — required for efficient eviction
-      if (meta.syncGroupField != null && !created.has(meta.syncGroupField)) {
-        store.createIndex(meta.syncGroupField, meta.syncGroupField, {
-          unique: false,
-        });
       }
     }
   }
@@ -316,10 +308,6 @@ export class Database implements StorageAdapter {
       if (propMeta.indexed === true) {
         wantedIndexes.add(propName);
       }
-    }
-    // syncGroupField is implicitly indexed
-    if (meta.syncGroupField != null) {
-      wantedIndexes.add(meta.syncGroupField);
     }
 
     // Remove indexes that shouldn't exist anymore
