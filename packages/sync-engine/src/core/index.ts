@@ -28,7 +28,6 @@ export type {
   BootstrapResponse,
   BootstrapFetcher,
   BootstrapFetcherOptions,
-  SyncGroupFetcher,
   StoreManagerConfig,
 } from "./StoreManager";
 

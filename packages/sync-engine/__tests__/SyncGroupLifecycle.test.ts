@@ -24,11 +24,17 @@ import { TestLayeredDriver, addToPool } from "./fixtures";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
+/** Mock shape used by tests: invoked when bootstrapFetcher is called with syncGroups. */
 type SyncGroupFetcher = (
   groups: string[],
+  options?: unknown,
 ) => Promise<Record<string, Record<string, unknown>[]>>;
 
-/** Build a StoreManager backed by MemoryAdapter with a syncGroupFetcher. */
+/**
+ * Build a StoreManager backed by MemoryAdapter. The optional `syncGroupFetcher`
+ * is wired into the bootstrapFetcher: when bootstrap is called with
+ * `options.syncGroups`, this returns the records it produces; otherwise empty.
+ */
 async function makeManager(
   opts: {
     syncGroupFetcher?: MockedFunction<SyncGroupFetcher>;
@@ -38,14 +44,25 @@ async function makeManager(
   } = {},
 ) {
   const adapter = new MemoryAdapter();
+  const bootstrapFetcher = vi
+    .fn()
+    .mockImplementation(async (_type, options) => {
+      if (options?.syncGroups != null && opts.syncGroupFetcher != null) {
+        const models = await opts.syncGroupFetcher(
+          options.syncGroups,
+          options,
+        );
+        return { lastSyncId: 0, subscribedSyncGroups: [], models };
+      }
+      return {
+        lastSyncId: 0,
+        subscribedSyncGroups: opts.initialGroups ?? [],
+        models: {},
+      };
+    });
   const manager = new StoreManager({
     workspaceId: crypto.randomUUID(),
-    bootstrapFetcher: vi.fn().mockResolvedValue({
-      lastSyncId: 0,
-      subscribedSyncGroups: opts.initialGroups ?? [],
-      models: {},
-    }),
-    syncGroupFetcher: opts.syncGroupFetcher,
+    bootstrapFetcher,
     storageAdapter: adapter,
     syncUrl: opts.syncUrl,
     sseClientFactory: opts.sseClientFactory,
@@ -104,14 +121,6 @@ afterEach(async () => {
 // ── activateSyncGroup() ───────────────────────────────────────────────────────
 
 describe("activateSyncGroup()", () => {
-  it("throws when syncGroupFetcher is not configured", async () => {
-    manager = await makeManager(); // no syncGroupFetcher
-
-    await expect(manager.activateSyncGroup("layer-A")).rejects.toThrow(
-      "syncGroupFetcher",
-    );
-  });
-
   it("calls syncGroupFetcher with the given groupId", async () => {
     const syncGroupFetcher = vi.fn().mockResolvedValue({});
     manager = await makeManager({ syncGroupFetcher });
@@ -219,7 +228,6 @@ describe("activateSyncGroup()", () => {
 
   it("reconnects SSE with the activated group in the URL", async () => {
     const { factory, urls } = recordingSSEFactory();
-    const syncGroupFetcher = vi.fn().mockResolvedValue({});
 
     manager = new StoreManager({
       workspaceId: crypto.randomUUID(),
@@ -228,7 +236,6 @@ describe("activateSyncGroup()", () => {
         subscribedSyncGroups: [],
         models: {},
       }),
-      syncGroupFetcher,
       syncUrl: "http://test/events",
       sseClientFactory: factory,
     });
@@ -240,6 +247,46 @@ describe("activateSyncGroup()", () => {
     // A new SSE connection should have been opened after activation
     expect(urls.length).toBeGreaterThan(urlsBefore);
     expect(urls[urls.length - 1]).toContain("layer-A");
+  });
+
+  // Guards the contract documented in StoreManager.fetchSyncGroupModels:
+  // dbMeta.lastSyncId is a global checkpoint across all subscribed groups.
+  // A scoped fetch's lastSyncId only describes the requested groups, so
+  // assigning it would let SSE skip events for *other* subscribed groups
+  // — silent data loss. Don't advance it from a scoped fetch even when
+  // the scoped response is "newer".
+  it("does not advance dbMeta.lastSyncId when the scoped fetch returns a higher syncId", async () => {
+    const adapter = new MemoryAdapter();
+    const bootstrapFetcher = vi
+      .fn()
+      .mockImplementation(async (_type, options) => {
+        if (options?.syncGroups != null) {
+          return {
+            lastSyncId: 1000,
+            subscribedSyncGroups: [],
+            models: {},
+          };
+        }
+        return { lastSyncId: 500, subscribedSyncGroups: [], models: {} };
+      });
+    manager = new StoreManager({
+      workspaceId: crypto.randomUUID(),
+      bootstrapFetcher,
+      storageAdapter: adapter,
+    });
+    await manager.database.connect();
+    await manager.database.saveMeta({
+      lastSyncId: 500,
+      firstSyncId: 0,
+      subscribedSyncGroups: [],
+      schemaHash: "test",
+      dbVersion: 1,
+      backendDatabaseVersion: 0,
+    });
+
+    await manager.activateSyncGroup("layer-A");
+
+    expect(manager.database.currentMeta?.lastSyncId).toBe(500);
   });
 });
 
@@ -316,14 +363,6 @@ describe("activateSyncGroup() with fetch: false", () => {
     );
   });
 
-  it("does not require syncGroupFetcher to be configured", async () => {
-    manager = await makeManager(); // no syncGroupFetcher
-
-    await expect(
-      manager.activateSyncGroup("layer-A", { fetch: false }),
-    ).resolves.not.toThrow();
-  });
-
   it("still reconnects SSE after subscribing", async () => {
     const { factory, urls } = recordingSSEFactory();
     manager = new StoreManager({
@@ -383,7 +422,6 @@ describe("activateSyncGroup() with ephemeral: true", () => {
 
   it("still reconnects SSE with the group in the URL", async () => {
     const { factory, urls } = recordingSSEFactory();
-    const syncGroupFetcher = vi.fn().mockResolvedValue({});
 
     manager = new StoreManager({
       workspaceId: crypto.randomUUID(),
@@ -392,7 +430,6 @@ describe("activateSyncGroup() with ephemeral: true", () => {
         subscribedSyncGroups: [],
         models: {},
       }),
-      syncGroupFetcher,
       syncUrl: "http://test/events",
       sseClientFactory: factory,
     });

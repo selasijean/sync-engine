@@ -99,24 +99,18 @@ export interface FetcherContext {
 export interface BootstrapFetcherOptions extends FetcherContext {
   sinceSyncId?: number;
   onlyModels?: string[];
+  /**
+   * Scope the response to records belonging to these sync groups. Set by the
+   * engine when activating a sync group at runtime or reacting to a delta that
+   * added the client to new groups. Server should ignore unrelated records.
+   */
+  syncGroups?: string[];
 }
 
 export type BootstrapFetcher = (
   type: BootstrapType.Full | BootstrapType.Partial,
   options?: BootstrapFetcherOptions,
 ) => Promise<BootstrapResponse>;
-
-export type SyncGroupFetcherOptions = FetcherContext;
-
-/**
- * Fetches models scoped to specific sync groups.
- * Called when a delta packet adds the user to new sync groups
- * (e.g. user joins a new team → fetch all Issues for that team).
- */
-export type SyncGroupFetcher = (
-  addedGroups: string[],
-  options?: SyncGroupFetcherOptions,
-) => Promise<Record<string, Record<string, unknown>[]>>;
 
 export interface ModelStreamConfig {
   url: string;
@@ -132,7 +126,6 @@ export interface StoreManagerConfig {
   workspaceId: string;
   bootstrapFetcher: BootstrapFetcher;
   transactionSender?: TransactionSender;
-  syncGroupFetcher?: SyncGroupFetcher;
   syncUrl?: string;
 
   /** Secondary model update streams (e.g. a calculation service). */
@@ -341,9 +334,7 @@ export class StoreManager {
           this.objectPool,
           this.transactionQueue,
           this.config.onDeltaPacket,
-          this.config.syncGroupFetcher != null
-            ? (added, _removed) => this.handleSyncGroupsAdded(added)
-            : undefined,
+          (added, _removed) => this.handleSyncGroupsAdded(added),
           this.isCollectionLoaded.bind(this),
           sseFactory,
           this.config.syncTransform,
@@ -388,23 +379,31 @@ export class StoreManager {
    *
    * If deferredModels is not configured, everything is fetched in one request.
    */
+  /**
+   * True when the model should be skipped from a bootstrap payload because the
+   * configured `onDemandFetcher` will fetch it later on first access. Returns
+   * false when no on-demand fetcher is configured (everything ships normally).
+   */
+  private isSkippedAtBootstrap(m: ModelMeta): boolean {
+    if (this.config.onDemandFetcher == null) {
+      return false;
+    }
+    return (
+      m.loadStrategy === LoadStrategy.Partial ||
+      m.loadStrategy === LoadStrategy.Lazy ||
+      m.loadStrategy === LoadStrategy.ExplicitlyRequested
+    );
+  }
+
   private async fullBootstrap() {
     const deferred = new Set(this.config.deferredModels ?? []);
     const allMetas = ModelRegistry.allModels();
-
-    // When onDemandFetcher is configured, Partial / Lazy / ExplicitlyRequested
-    // models are loaded as accessed, so don't waste bootstrap payload on them.
     const isOnDemand = this.config.onDemandFetcher != null;
-    const skipAtBootstrap = (m: ModelMeta) =>
-      isOnDemand &&
-      (m.loadStrategy === LoadStrategy.Partial ||
-        m.loadStrategy === LoadStrategy.Lazy ||
-        m.loadStrategy === LoadStrategy.ExplicitlyRequested);
 
     if (deferred.size > 0) {
       // Phase 1: critical models only
       const criticalModels = allMetas
-        .filter((m) => !deferred.has(m.name) && !skipAtBootstrap(m))
+        .filter((m) => !deferred.has(m.name) && !this.isSkippedAtBootstrap(m))
         .map((m) => m.name);
       this.setPhase(
         BootstrapPhase.Fetching,
@@ -450,7 +449,9 @@ export class StoreManager {
       this.setPhase(BootstrapPhase.Fetching, "full");
       const res = await this.config.bootstrapFetcher(BootstrapType.Full, {
         onlyModels: isOnDemand
-          ? allMetas.filter((m) => !skipAtBootstrap(m)).map((m) => m.name)
+          ? allMetas
+              .filter((m) => !this.isSkippedAtBootstrap(m))
+              .map((m) => m.name)
           : undefined,
         currentMeta: this.database.currentMeta,
       });
@@ -809,20 +810,70 @@ export class StoreManager {
    * etc. that belong to that team.
    */
   private async handleSyncGroupsAdded(addedGroups: string[]): Promise<void> {
-    if (this.config.syncGroupFetcher == null || addedGroups.length === 0) {
+    if (addedGroups.length === 0) {
       return;
     }
+    const dbMeta = this.database.currentMeta;
+    if (dbMeta == null) {
+      return;
+    }
+    // Schema-mismatch return is intentionally ignored: fetchSyncGroupModels
+    // already triggered a full re-bootstrap internally, which clears the pool
+    // and reloads from scratch. Nothing more for the SSE-driven path to do.
+    await this.fetchSyncGroupModels(addedGroups, dbMeta);
+  }
 
-    const models = await this.config.syncGroupFetcher(addedGroups, {
-      currentMeta: this.database.currentMeta,
+  /**
+   * Scoped bootstrap-fetcher call: same fetcher used by full/partial bootstrap,
+   * scoped to a subset of groups via `syncGroups`. Also narrows `onlyModels` so
+   * on-demand-loaded models aren't shipped when an `onDemandFetcher` is wired.
+   *
+   * Returns `schemaMismatch: true` if the server reports a schema version that
+   * doesn't match what's stored — in that case a full re-bootstrap has already
+   * been triggered and the caller should bail.
+   */
+  private async fetchSyncGroupModels(
+    groups: string[],
+    dbMeta: DatabaseMeta,
+  ): Promise<{ schemaMismatch: boolean }> {
+    const isOnDemand = this.config.onDemandFetcher != null;
+    const res = await this.config.bootstrapFetcher(BootstrapType.Full, {
+      syncGroups: groups,
+      onlyModels: isOnDemand
+        ? ModelRegistry.allModels()
+            .filter((m) => !this.isSkippedAtBootstrap(m))
+            .map((m) => m.name)
+        : undefined,
+      currentMeta: dbMeta,
     });
 
+    if (
+      res.backendDatabaseVersion !== undefined &&
+      dbMeta.backendDatabaseVersion !== undefined &&
+      res.backendDatabaseVersion !== dbMeta.backendDatabaseVersion
+    ) {
+      this.objectPool.clear();
+      await this.fullBootstrap();
+      return { schemaMismatch: true };
+    }
+
     await Promise.all(
-      Object.entries(models).map(async ([modelName, records]) => {
+      Object.entries(res.models).map(async ([modelName, records]) => {
         await this.database.writeModels(modelName, records);
         this.hydrateInstantModels(modelName, records);
       }),
     );
+
+    // Don't touch dbMeta.lastSyncId. It's a *global* checkpoint — the highest
+    // syncId for which we've applied every event across every subscribed group.
+    // res.lastSyncId only describes the scoped groups, so if it's ahead of the
+    // current checkpoint, the gap [current, res.lastSyncId] may contain events
+    // for OTHER subscribed groups that we haven't received. Advancing the
+    // checkpoint would cause the next SSE reconnect (`?since=<lastSyncId>`) to
+    // skip those events — silent data loss. Leave it alone; SSE will replay
+    // anything the scoped fetcher delivered and writes are overwrite-by-id.
+
+    return { schemaMismatch: false };
   }
 
   /**
@@ -870,7 +921,9 @@ export class StoreManager {
    *
    * Idempotent — does nothing if the group is already active.
    *
-   * Requires syncGroupFetcher to be configured when fetch is true (default).
+   * Uses the same `bootstrapFetcher` as initial bootstrap, scoped via the
+   * `syncGroups` option. The server should return only records belonging to
+   * those groups.
    */
   async activateSyncGroup(
     groupId: string | string[],
@@ -893,20 +946,13 @@ export class StoreManager {
     }
 
     if (fetch) {
-      if (this.config.syncGroupFetcher == null) {
-        throw new Error(
-          "activateSyncGroup requires syncGroupFetcher to be configured when fetch is true",
-        );
-      }
-      const models = await this.config.syncGroupFetcher(newIds, {
-        currentMeta: dbMeta,
-      });
-      await Promise.all(
-        Object.entries(models).map(async ([modelName, records]) => {
-          await this.database.writeModels(modelName, records);
-          this.hydrateInstantModels(modelName, records);
-        }),
+      const { schemaMismatch } = await this.fetchSyncGroupModels(
+        newIds,
+        dbMeta,
       );
+      if (schemaMismatch) {
+        return;
+      }
     }
 
     const groups = new Set(dbMeta.subscribedSyncGroups);
