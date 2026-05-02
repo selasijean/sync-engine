@@ -62,16 +62,12 @@ public teamId: string | null = null;
 
 @Property({ serializer: dateSerializer, deserializer: dateDeserializer })
 public createdAt: Date = new Date();
-
-@Property({ lazy: true })
-public content = "";
 ```
 
 Marks a field as persisted and observable.
 
 - `indexed: true` → IndexedDB creates a secondary index on this field. Enables fast `readModelsByIndex("Issue", "teamId", "team-123")` instead of full table scan.
 - `serializer/deserializer` → custom JSON conversion. Dates get stored as ISO strings and deserialized back to `Date` objects on hydration.
-- `lazy: true` → field is excluded from the default hydration. Only loaded when explicitly requested (used for large payloads like document content).
 
 ### `@EphemeralProperty`
 
@@ -100,6 +96,8 @@ The `onDelete` option tells the engine what to do when the referenced model is d
 - `"nullify"` — set the ID field to null (e.g., clear `assigneeId` when User is deleted)
 - `"restrict"` — throw a `RestrictDeleteError` if any instance still holds this reference (i.e., you must clean up first)
 
+`lazy` (default: `true`) controls whether the referenced model is pulled into the pool when the parent is hydrated. With `lazy: false`, the engine calls `storeManager.loadOne(referenceTo, id)` from inside `makeModelObservable()` so the accessor doesn't return `null` on first read. See `04-lazy-loading.md`.
+
 ### `@ReferenceArray`
 
 ```typescript
@@ -112,11 +110,15 @@ The parent stores an array of IDs directly on itself. The decorator creates a vi
 ### `@ReferenceCollection`
 
 ```typescript
-@ReferenceCollection("Issue", { lazy: true })
+@ReferenceCollection("Issue", { inverseOf: "teamId" })
 public issues: LazyReferenceCollection<Issue>;
 ```
 
-One-to-many where the **foreign key lives on the child**. `team.issues` is a `LazyReferenceCollection` that, when loaded, queries all Issues where `teamId === team.id`. The collection is lazy — it doesn't load until you call `.load()` or use the `useCollection` hook.
+One-to-many where the **foreign key lives on the child**. `team.issues` is a `LazyReferenceCollection` that, when loaded, queries all Issues where `teamId === team.id`. By default it's lazy — doesn't load until you call `.load()` or use the `useCollection` hook.
+
+`lazy` (default: `true`) controls hydration timing:
+- `true` — collection stays Idle until something triggers `.load()`.
+- `false` — eagerly loaded inside `makeModelObservable()` right after the parent is hydrated. Recursion is automatic: each loaded child runs its own `makeModelObservable`, so non-lazy collections nested further down the tree also load.
 
 See `04-lazy-loading.md` for how this works internally.
 
@@ -140,6 +142,8 @@ public members: LazyOwnedCollection<User>;
 ```
 
 The parent stores an array of child IDs directly as a `@Property`. The `@OwnedCollection` turns that array into a lazy collection. When the array changes, the collection reflects it on next load.
+
+`lazy` (default: `true`) — pass `lazy: false` to eagerly load owned items into the pool inside `makeModelObservable()`. Symmetric with `@ReferenceCollection`.
 
 ### `@Action`
 
