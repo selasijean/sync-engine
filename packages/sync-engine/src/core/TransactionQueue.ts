@@ -16,6 +16,7 @@
 import type { StorageAdapter } from "./Database";
 import { ObjectPool } from "./ObjectPool";
 import { ModelRegistry } from "./ModelRegistry";
+import { toError, type EngineErrorContext } from "./types";
 import {
   BaseTransaction,
   UpdateTransaction,
@@ -80,11 +81,20 @@ export class TransactionQueue {
   private flushDelay = 50; // ms — batches rapid saves
   private undoLimit: number;
   private listeners = new Set<Listener>();
+  private reportError:
+    | ((err: Error, context: EngineErrorContext) => void)
+    | null = null;
 
   constructor(database: StorageAdapter, pool: ObjectPool, undoLimit = 100) {
     this.database = database;
     this.pool = pool;
     this.undoLimit = undoLimit;
+  }
+
+  setErrorReporter(
+    reporter: (err: Error, context: EngineErrorContext) => void,
+  ) {
+    this.reportError = reporter;
   }
 
   setSender(sender: TransactionSender) {
@@ -244,12 +254,16 @@ export class TransactionQueue {
         }
         await this.database.deleteCachedTransactions(batchKeys);
       }
-    } catch {
+    } catch (err) {
       // Network error — put back in pending for retry
       this.executing = this.executing.filter((tx) => !batch.includes(tx));
       batch.forEach((tx) => (tx.state = TransactionState.Pending));
       this.pending = [...batch, ...this.pending];
       setTimeout(() => this.scheduleFlush(), 2000);
+      this.reportError?.(toError(err), {
+        kind: "transactionSend",
+        batchSize: batch.length,
+      });
     }
   }
 

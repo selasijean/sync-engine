@@ -47,8 +47,11 @@ import {
   BootstrapPhase,
   LoadStrategy,
   PropertyType,
+  toError,
   type ModelMeta,
   type PropertyChange,
+  type EngineErrorContext,
+  type EngineErrorHandler,
 } from "./types";
 
 function prop(model: BaseModel, key: string): unknown {
@@ -220,6 +223,17 @@ export interface StoreManagerConfig {
   onReady?: () => void;
 
   /**
+   * Single hook for every async failure the engine catches internally —
+   * eager loads, SSE parse errors, transaction send retries, deferred bootstrap
+   * fetches, etc. Adopters typically wire this into Sentry/Datadog/console.
+   *
+   * Receives the error and a tagged-union `EngineErrorContext` describing the
+   * failure site. Throwing from inside the handler is swallowed (it can't break
+   * the engine). Without this hook every internal failure is silently dropped.
+   */
+  onError?: EngineErrorHandler;
+
+  /**
    * Called when a sync group is removed — by `deactivateSyncGroup` or by an
    * SSE delta carrying `removedSyncGroups`. The engine has already updated
    * `dbMeta.subscribedSyncGroups` by the time this fires; SSE reconnect waits
@@ -270,6 +284,9 @@ export class StoreManager {
     if (config.transactionSender != null) {
       this.transactionQueue.setSender(config.transactionSender);
     }
+    this.transactionQueue.setErrorReporter((err, ctx) =>
+      this.emitError(err, ctx),
+    );
     BaseModel.storeManager = this; // wire auto-commit
   }
 
@@ -288,6 +305,23 @@ export class StoreManager {
   private setPhase(phase: BootstrapPhase, detail?: string) {
     this._phase = phase;
     this.config.onPhaseChange?.(phase, detail);
+  }
+
+  /**
+   * Route an internal error to `config.onError`. No-op when the hook isn't
+   * configured. Wrapped in try/catch so a buggy adopter handler can't crash
+   * the engine.
+   */
+  emitError(err: unknown, context: EngineErrorContext): void {
+    const handler = this.config.onError;
+    if (handler == null) {
+      return;
+    }
+    try {
+      handler(toError(err), context);
+    } catch {
+      // user's onError threw — swallow
+    }
   }
 
   // ── Bootstrap pipeline ────────────────────────────────────────────────────
@@ -343,6 +377,8 @@ export class StoreManager {
       const sseFactory =
         this.config.sseClientFactory ??
         createBrowserSSEFactory(this.config.sseInit);
+      const sseErrorReporter = (err: Error, ctx: EngineErrorContext) =>
+        this.emitError(err, ctx);
       if (this.config.syncUrl != null) {
         this.syncConnection = new SyncConnection(
           this.config.syncUrl,
@@ -357,6 +393,7 @@ export class StoreManager {
           this.isCollectionLoaded.bind(this),
           sseFactory,
           this.config.syncTransform,
+          sseErrorReporter,
         );
         this.syncConnection.connect();
       }
@@ -368,6 +405,7 @@ export class StoreManager {
           streamConfig.onStatusChange,
           sseFactory,
           streamConfig.transform,
+          sseErrorReporter,
         );
         stream.connect();
         this.modelStreams.push(stream);
@@ -529,8 +567,10 @@ export class StoreManager {
         meta.lastSyncId = res.lastSyncId;
         await this.database.saveMeta(meta);
       }
-    } catch {
-      // Deferred fetch failure is non-fatal — models load on demand later
+    } catch (err) {
+      // Deferred fetch failure is non-fatal — models load on demand later.
+      // Surface to onError so adopters can monitor.
+      this.emitError(err, { kind: "deferredBootstrap", modelNames });
     }
   }
 
@@ -853,7 +893,11 @@ export class StoreManager {
     await this.fireOnSyncGroupDelete(removedGroups);
   }
 
-  /** Fire `onSyncGroupDelete` once per group, serially. No-op when unconfigured. */
+  /**
+   * Fire `onSyncGroupDelete` once per group, serially. Errors thrown by the
+   * adopter's callback are caught and routed to `onError` so one bad group
+   * doesn't abort cleanup for the rest.
+   */
   private async fireOnSyncGroupDelete(
     groupIds: string[] | Iterable<string>,
   ): Promise<void> {
@@ -862,7 +906,11 @@ export class StoreManager {
       return;
     }
     for (const g of groupIds) {
-      await cb(g, this);
+      try {
+        await cb(g, this);
+      } catch (err) {
+        this.emitError(err, { kind: "onSyncGroupDelete", groupId: g });
+      }
     }
   }
 
@@ -880,15 +928,21 @@ export class StoreManager {
     dbMeta: DatabaseMeta,
   ): Promise<{ schemaMismatch: boolean }> {
     const isOnDemand = this.config.onDemandFetcher != null;
-    const res = await this.config.bootstrapFetcher(BootstrapType.Full, {
-      syncGroups: groups,
-      onlyModels: isOnDemand
-        ? ModelRegistry.allModels()
-            .filter((m) => !this.isSkippedAtBootstrap(m))
-            .map((m) => m.name)
-        : undefined,
-      currentMeta: dbMeta,
-    });
+    let res: BootstrapResponse;
+    try {
+      res = await this.config.bootstrapFetcher(BootstrapType.Full, {
+        syncGroups: groups,
+        onlyModels: isOnDemand
+          ? ModelRegistry.allModels()
+              .filter((m) => !this.isSkippedAtBootstrap(m))
+              .map((m) => m.name)
+          : undefined,
+        currentMeta: dbMeta,
+      });
+    } catch (err) {
+      this.emitError(err, { kind: "syncGroupFetch", groups });
+      throw err;
+    }
 
     if (
       res.backendDatabaseVersion !== undefined &&

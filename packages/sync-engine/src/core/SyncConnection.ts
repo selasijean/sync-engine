@@ -23,12 +23,17 @@ import { ObjectPool } from "./ObjectPool";
 import { ModelRegistry } from "./ModelRegistry";
 import { TransactionQueue } from "./TransactionQueue";
 import { LoadStrategy, PropertyType, type ModelMeta } from "./types";
-import { BaseSSEConnection, type SSEClientFactory } from "./BaseSSEConnection";
+import {
+  BaseSSEConnection,
+  type SSEClientFactory,
+  type SSEErrorReporter,
+} from "./BaseSSEConnection";
 
 // Re-export so existing imports from "@sync-engine/SyncConnection" keep working.
 export {
   type SSEClient,
   type SSEClientFactory,
+  type SSEErrorReporter,
   createBrowserSSEFactory,
 } from "./BaseSSEConnection";
 
@@ -82,8 +87,9 @@ export class SyncConnection extends BaseSSEConnection {
     ) => boolean,
     sseClientFactory?: SSEClientFactory,
     private transform?: SyncMessageTransform,
+    reportError?: SSEErrorReporter,
   ) {
-    super(url, sseClientFactory);
+    super(url, sseClientFactory, reportError);
   }
 
   protected buildUrl(): string {

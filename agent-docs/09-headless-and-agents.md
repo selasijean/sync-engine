@@ -254,6 +254,45 @@ onStatusChange: (connected) => {
 }
 ```
 
+## Observability
+
+Headless deployments often need structured error reporting more than the browser does — a server-side process can't show toast notifications, and silent failures in eager loads or transaction retries can mask real outages. `StoreManagerConfig.onError` is a single hook that fires for every async failure the engine catches internally:
+
+```typescript
+import { StoreManager, type EngineErrorContext } from "sync-engine";
+
+const sm = new StoreManager({
+  // ...
+  onError: (err, ctx: EngineErrorContext) => {
+    log.error({ err, ...ctx }, `engine: ${ctx.kind}`);
+  },
+});
+```
+
+`ctx.kind` is a tagged-union discriminator. Each kind carries fields specific to its failure site:
+
+| `ctx.kind` | When it fires | Extra fields |
+|---|---|---|
+| `eagerReferenceLoad` | `@Reference` (eager) — `storeManager.loadOne` rejects | `modelName`, `id` |
+| `eagerCollectionLoad` | `@ReferenceCollection` (eager) — loader rejects | `modelName`, `parentModelName`, `parentId` |
+| `lazyCollectionLoad` | `@LazyReferenceCollection` — loader rejects on explicit `.load()` | same as above |
+| `lazyOwnedCollectionLoad` | `@OwnedCollection` / `@LazyOwnedCollection` loader rejects | `modelName` |
+| `lazyBackRefLoad` | `@BackReference` loader rejects | `modelName`, `parentId` |
+| `deferredBootstrap` | Phase-2 deferred-models bootstrap fetcher rejects | `modelNames` |
+| `syncGroupFetch` | `bootstrapFetcher` with `syncGroups` rejects (during activation or SSE-driven addition) | `groups` |
+| `ssePacketParse` | The SSE message handler throws (malformed JSON, unknown action, etc.) | `url`, `raw` |
+| `sseConstruction` | The `sseClientFactory` throws when opening the connection | `url` |
+| `transactionSend` | `transactionSender` rejects; the batch is re-queued for retry | `batchSize` |
+| `onSyncGroupDelete` | The adopter's `onSyncGroupDelete` callback throws | `groupId` |
+
+Errors thrown from inside `onError` itself are swallowed, so a buggy logger can't crash the engine. Without `onError` configured, internal failures stay silent (existing behavior preserved).
+
+Other lifecycle hooks on the same config:
+
+- `onPhaseChange(phase, detail)` — bootstrap state machine: `Idle` → `CreatingStores` → `ConnectingDatabase` → `Fetching` → `Hydrating` → `ConnectingSync` → `Ready` (or `Error`).
+- `onDeltaPacket(packet)` — fires on every SSE delta after it processes (useful for "last activity" timestamps).
+- `onReady()` — fires once when bootstrap completes.
+
 ## Teardown
 
 Always call `teardown()` when done to close the SSE connection, flush pending transactions, and release resources:

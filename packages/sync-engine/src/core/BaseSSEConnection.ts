@@ -1,3 +1,5 @@
+import { toError, type EngineErrorContext } from "./types";
+
 export interface SSEClient {
   onmessage: ((event: { data: string }) => void) | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -6,6 +8,11 @@ export interface SSEClient {
 }
 
 export type SSEClientFactory = (url: string) => SSEClient;
+
+export type SSEErrorReporter = (
+  err: Error,
+  context: EngineErrorContext,
+) => void;
 
 export const createBrowserSSEFactory =
   (init?: EventSourceInit): SSEClientFactory =>
@@ -19,6 +26,7 @@ export abstract class BaseSSEConnection {
   constructor(
     protected url: string,
     private sseClientFactory: SSEClientFactory = createBrowserSSEFactory(),
+    private reportError?: SSEErrorReporter,
   ) {}
 
   connect() {
@@ -70,8 +78,12 @@ export abstract class BaseSSEConnection {
       this.eventSource.onmessage = (e) => {
         try {
           this.onMessage(e.data);
-        } catch {
-          // ignore malformed messages
+        } catch (err) {
+          this.reportError?.(toError(err), {
+            kind: "ssePacketParse",
+            url,
+            raw: e.data,
+          });
         }
       };
 
@@ -83,8 +95,8 @@ export abstract class BaseSSEConnection {
       };
 
       this.onOpen();
-    } catch {
-      // construction failed
+    } catch (err) {
+      this.reportError?.(toError(err), { kind: "sseConstruction", url });
     }
   }
 

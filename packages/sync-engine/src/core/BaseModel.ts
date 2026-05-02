@@ -175,10 +175,16 @@ export class BaseModel {
             typeof currentValue === "string" &&
             currentValue !== ""
           ) {
-            void BaseModel.storeManager.loadOne(
-              prop.referenceTo!,
-              currentValue,
-            );
+            const sm = BaseModel.storeManager;
+            const refTo = prop.referenceTo!;
+            const id = currentValue;
+            sm.loadOne(refTo, id).catch((err) => {
+              sm.emitError(err, {
+                kind: "eagerReferenceLoad",
+                modelName: refTo,
+                id,
+              });
+            });
           }
           break;
         }
@@ -196,10 +202,11 @@ export class BaseModel {
 
           // Wire loader from StoreManager (for async IDB/server loading)
           if (BaseModel.storeManager != null) {
+            const sm = BaseModel.storeManager;
             collection.setLoader(async (modelName, queries) => {
               const results: BaseModel[] = [];
               for (const q of queries) {
-                const items = await BaseModel.storeManager!.loadCollection(
+                const items = await sm.loadCollection(
                   modelName,
                   q.key,
                   q.value,
@@ -207,6 +214,18 @@ export class BaseModel {
                 results.push(...items);
               }
               return results;
+            });
+            const parentModelName = meta.name;
+            const parentId = this.id;
+            const refTo = prop.referenceTo!;
+            const isEager = prop.lazy === false;
+            collection.setOnError((err) => {
+              sm.emitError(err, {
+                kind: isEager ? "eagerCollectionLoad" : "lazyCollectionLoad",
+                modelName: refTo,
+                parentModelName,
+                parentId,
+              });
             });
           }
 
@@ -231,8 +250,16 @@ export class BaseModel {
           );
 
           if (BaseModel.storeManager != null) {
+            const sm = BaseModel.storeManager;
             collection.setLoader(async (modelName, ids) => {
-              return BaseModel.storeManager!.loadByIds(modelName, ids);
+              return sm.loadByIds(modelName, ids);
+            });
+            const refTo = prop.referenceTo!;
+            collection.setOnError((err) => {
+              sm.emitError(err, {
+                kind: "lazyOwnedCollectionLoad",
+                modelName: refTo,
+              });
             });
           }
 
@@ -251,13 +278,19 @@ export class BaseModel {
           backRef.hydrate(this.id);
 
           if (BaseModel.storeManager != null) {
+            const sm = BaseModel.storeManager;
             backRef.setLoader(async (modelName, key, value) => {
-              const items = await BaseModel.storeManager!.loadCollection(
-                modelName,
-                key,
-                value,
-              );
+              const items = await sm.loadCollection(modelName, key, value);
               return items[0] ?? null;
+            });
+            const refTo = prop.referenceTo!;
+            const parentId = this.id;
+            backRef.setOnError((err) => {
+              sm.emitError(err, {
+                kind: "lazyBackRefLoad",
+                modelName: refTo,
+                parentId,
+              });
             });
           }
 

@@ -7,7 +7,11 @@
 import type { StorageAdapter } from "./Database";
 import { ObjectPool } from "./ObjectPool";
 import { ModelRegistry } from "./ModelRegistry";
-import { BaseSSEConnection, type SSEClientFactory } from "./BaseSSEConnection";
+import {
+  BaseSSEConnection,
+  type SSEClientFactory,
+  type SSEErrorReporter,
+} from "./BaseSSEConnection";
 import { LoadStrategy } from "./types";
 
 export interface ModelUpdate {
@@ -35,8 +39,9 @@ export class ModelStream extends BaseSSEConnection {
     private onStatusChange?: (connected: boolean) => void,
     sseClientFactory?: SSEClientFactory,
     private transform?: ModelStreamMessageTransform,
+    reportError?: SSEErrorReporter,
   ) {
-    super(url, sseClientFactory);
+    super(url, sseClientFactory, reportError);
   }
 
   disconnect() {

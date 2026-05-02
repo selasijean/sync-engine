@@ -219,6 +219,29 @@ await sm.refreshModels("Activity", ["a1", "a2"]);
 await sm.refreshAllOfModel("Activity");
 ```
 
+### Observability
+
+Wire `onError` once and every async failure the engine catches internally — eager loads, SSE parse errors, transaction send retries, deferred bootstrap fetches, sync-group eviction callback throws — routes through it with a tagged-union context describing the failure site:
+
+```ts
+import { StoreManager, type EngineErrorContext } from "sync-engine";
+
+new StoreManager({
+  // ...
+  onError: (err, ctx: EngineErrorContext) => {
+    Sentry.captureException(err, { tags: { kind: ctx.kind, ...ctx } });
+  },
+});
+```
+
+`ctx.kind` is one of: `eagerReferenceLoad`, `eagerCollectionLoad`, `lazyCollectionLoad`, `lazyOwnedCollectionLoad`, `lazyBackRefLoad`, `deferredBootstrap`, `syncGroupFetch`, `ssePacketParse`, `sseConstruction`, `transactionSend`, `onSyncGroupDelete`. Each carries fields specific to its site (model name, parent id, raw SSE message, etc.). Without `onError`, internal failures are silently dropped (existing behavior preserved).
+
+Other lifecycle hooks on the same config:
+
+- `onPhaseChange(phase, detail)` — bootstrap state machine (`Idle` → `Fetching` → `Hydrating` → `Ready` | `Error`).
+- `onDeltaPacket(packet)` — fires on every SSE delta after it processes.
+- `onReady()` — fires when bootstrap completes.
+
 ### Isolated vs shared agent state
 
 - **Isolated** — each agent has its own `StoreManager`. Convergence happens via SSE. Undo is local; agent writes arrive in the browser as deltas and never touch the browser's undo stack.

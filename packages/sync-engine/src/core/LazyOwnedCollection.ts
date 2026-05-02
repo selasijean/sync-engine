@@ -77,6 +77,7 @@ export class OwnedRefs<
         this.state = CollectionState.Error;
       });
       this.notifyListeners();
+      this.reportError(err as Error);
       return [];
     }
   }

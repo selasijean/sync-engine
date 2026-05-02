@@ -132,4 +132,42 @@ export interface IStoreManager {
   ): Promise<BaseModel[]>;
   loadByIds(modelName: string, ids: string[]): Promise<BaseModel[]>;
   loadOne(modelName: string, id: string): Promise<BaseModel | null>;
+  emitError(err: unknown, context: EngineErrorContext): void;
 }
+
+/**
+ * Tagged union describing where in the engine an error originated. Passed to
+ * `StoreManagerConfig.onError` so adopters can route into Sentry/Datadog/console
+ * with the right metadata. Each tag carries fields specific to its failure site.
+ */
+export type EngineErrorContext =
+  | { kind: "eagerReferenceLoad"; modelName: string; id: string }
+  | {
+      kind: "eagerCollectionLoad";
+      modelName: string;
+      parentModelName: string;
+      parentId: string;
+    }
+  | {
+      kind: "lazyCollectionLoad";
+      modelName: string;
+      parentModelName: string;
+      parentId: string;
+    }
+  | { kind: "lazyOwnedCollectionLoad"; modelName: string }
+  | { kind: "lazyBackRefLoad"; modelName: string; parentId: string }
+  | { kind: "deferredBootstrap"; modelNames: string[] }
+  | { kind: "syncGroupFetch"; groups: string[] }
+  | { kind: "ssePacketParse"; url: string; raw: string }
+  | { kind: "sseConstruction"; url: string }
+  | { kind: "transactionSend"; batchSize: number }
+  | { kind: "onSyncGroupDelete"; groupId: string };
+
+export type EngineErrorHandler = (
+  err: Error,
+  context: EngineErrorContext,
+) => void;
+
+/** Coerce an `unknown` from a `catch` clause into a real `Error` instance. */
+export const toError = (err: unknown): Error =>
+  err instanceof Error ? err : new Error(String(err));

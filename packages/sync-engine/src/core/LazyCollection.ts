@@ -59,6 +59,7 @@ export abstract class LazyCollectionBase<T extends BaseModel = BaseModel> {
 
   private listeners = new Set<() => void>();
   private inFlight: Promise<T[]> | null = null;
+  private onErrorHandler: ((err: Error) => void) | null = null;
 
   constructor(referencedModelName: string) {
     this.referencedModelName = referencedModelName;
@@ -67,6 +68,17 @@ export abstract class LazyCollectionBase<T extends BaseModel = BaseModel> {
       state: observable,
       error: observable,
     });
+  }
+
+  /** Wire a side-channel error reporter. Called by the loader's catch block in
+   * subclasses, in addition to setting `state = Error` and `.error`. Used by
+   * StoreManager to route into `config.onError` for telemetry. */
+  setOnError(handler: (err: Error) => void) {
+    this.onErrorHandler = handler;
+  }
+
+  protected reportError(err: Error) {
+    this.onErrorHandler?.(err);
   }
 
   /** Subclass implementation. `load()` wraps this with concurrent-call dedup. */
@@ -209,6 +221,7 @@ export class RefCollection<
         this.state = CollectionState.Error;
       });
       this.notifyListeners();
+      this.reportError(err as Error);
       return [];
     }
   }
@@ -239,6 +252,8 @@ export class BackRef<T extends BaseModel = BaseModel> {
     | ((modelName: string, key: string, value: string) => Promise<T | null>)
     | null = null;
 
+  private onErrorHandler: ((err: Error) => void) | null = null;
+
   constructor(referencedModelName: string, inverseOf: string) {
     this.referencedModelName = referencedModelName;
     this.inverseOf = inverseOf;
@@ -262,6 +277,10 @@ export class BackRef<T extends BaseModel = BaseModel> {
     ) => Promise<T | null>,
   ) {
     this.loader = loader;
+  }
+
+  setOnError(handler: (err: Error) => void) {
+    this.onErrorHandler = handler;
   }
 
   /** Resolve from pool synchronously. */
@@ -306,6 +325,7 @@ export class BackRef<T extends BaseModel = BaseModel> {
         this.error = err as Error;
         this.state = CollectionState.Error;
       });
+      this.onErrorHandler?.(err as Error);
       return null;
     }
   }
