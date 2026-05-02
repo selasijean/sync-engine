@@ -39,6 +39,7 @@ import {
   type DeltaPacket,
   type SSEClientFactory,
   type SyncMessageTransform,
+  createBrowserSSEFactory,
 } from "./SyncConnection";
 import { ModelStream, type ModelStreamMessageTransform } from "./ModelStream";
 import { BaseModel } from "./BaseModel";
@@ -143,8 +144,20 @@ export interface StoreManagerConfig {
    *
    *   import EventSource from "eventsource";
    *   sseClientFactory: (url) => new EventSource(url)
+   *
+   * When set, `sseInit` is ignored — your factory is responsible for any options.
    */
   sseClientFactory?: SSEClientFactory;
+
+  /**
+   * Init options forwarded to the default browser EventSource (e.g. cookie auth):
+   *
+   *   sseInit: { withCredentials: true }
+   *
+   * Applies to the main sync stream and every entry in `modelStreams`. Ignored
+   * when `sseClientFactory` is set.
+   */
+  sseInit?: EventSourceInit;
 
   /**
    * Use when the backend sends a different envelope than the engine's
@@ -318,6 +331,9 @@ export class StoreManager {
       }
 
       this.setPhase(BootstrapPhase.ConnectingSync);
+      const sseFactory =
+        this.config.sseClientFactory ??
+        createBrowserSSEFactory(this.config.sseInit);
       if (this.config.syncUrl != null) {
         this.syncConnection = new SyncConnection(
           this.config.syncUrl,
@@ -329,7 +345,7 @@ export class StoreManager {
             ? (added, _removed) => this.handleSyncGroupsAdded(added)
             : undefined,
           this.isCollectionLoaded.bind(this),
-          this.config.sseClientFactory,
+          sseFactory,
           this.config.syncTransform,
         );
         this.syncConnection.connect();
@@ -340,7 +356,7 @@ export class StoreManager {
           this.database,
           this.objectPool,
           streamConfig.onStatusChange,
-          this.config.sseClientFactory,
+          sseFactory,
           streamConfig.transform,
         );
         stream.connect();

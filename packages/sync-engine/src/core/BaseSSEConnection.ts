@@ -7,8 +7,9 @@ export interface SSEClient {
 
 export type SSEClientFactory = (url: string) => SSEClient;
 
-export const browserSSEFactory: SSEClientFactory = (url) =>
-  new EventSource(url);
+export const createBrowserSSEFactory = (
+  init?: EventSourceInit,
+): SSEClientFactory => (url) => new EventSource(url, init);
 
 export abstract class BaseSSEConnection {
   private eventSource: SSEClient | null = null;
@@ -16,7 +17,7 @@ export abstract class BaseSSEConnection {
 
   constructor(
     protected url: string,
-    private sseClientFactory: SSEClientFactory = browserSSEFactory,
+    private sseClientFactory: SSEClientFactory = createBrowserSSEFactory(),
   ) {}
 
   connect() {

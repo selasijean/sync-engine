@@ -29,7 +29,7 @@ import { BaseSSEConnection, type SSEClientFactory } from "./BaseSSEConnection";
 export {
   type SSEClient,
   type SSEClientFactory,
-  browserSSEFactory,
+  createBrowserSSEFactory,
 } from "./BaseSSEConnection";
 
 export interface SyncAction {
