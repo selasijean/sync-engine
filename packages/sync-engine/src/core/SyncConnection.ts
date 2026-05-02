@@ -167,31 +167,36 @@ export class SyncConnection extends BaseSSEConnection {
       }
     }
 
-    // Step 4: apply to IndexedDB (server is SSOT — IDB mirrors it)
-    for (const action of packet.syncActions) {
-      const actionMeta = ModelRegistry.getModelMeta(action.modelName);
-      if (actionMeta?.loadStrategy === LoadStrategy.Ephemeral) {
-        continue;
-      }
-      if (["I", "U", "V", "C"].includes(action.action) && action.data != null) {
-        await this.database.writeModels(action.modelName, [
-          { id: action.modelId, ...action.data },
-        ]);
-      } else if (action.action === "D" || action.action === "A") {
-        await this.database.deleteModel(action.modelName, action.modelId);
-      }
-    }
-
-    // Step 5: apply to in-memory + rebase + cascade + invalidate
-    for (const action of packet.syncActions) {
-      this.applySyncAction(action);
-    }
-
-    // Step 6: update lastSyncId
+    // Stale packets (syncId <= lastSyncId): group changes above are idempotent
+    // (refetches authoritative state). syncActions would clobber newer pool state.
     const advanced = packet.syncId > meta.lastSyncId;
     if (advanced) {
+      // Step 4: apply to IndexedDB (server is SSOT — IDB mirrors it)
+      for (const action of packet.syncActions) {
+        const actionMeta = ModelRegistry.getModelMeta(action.modelName);
+        if (actionMeta?.loadStrategy === LoadStrategy.Ephemeral) {
+          continue;
+        }
+        if (
+          ["I", "U", "V", "C"].includes(action.action) &&
+          action.data != null
+        ) {
+          await this.database.writeModels(action.modelName, [
+            { id: action.modelId, ...action.data },
+          ]);
+        } else if (action.action === "D" || action.action === "A") {
+          await this.database.deleteModel(action.modelName, action.modelId);
+        }
+      }
+
+      // Step 5: apply to in-memory + rebase + cascade + invalidate
+      for (const action of packet.syncActions) {
+        this.applySyncAction(action);
+      }
+
       meta.lastSyncId = packet.syncId;
     }
+
     if (advanced || groupsChanged) {
       await this.database.saveMeta(meta);
     }

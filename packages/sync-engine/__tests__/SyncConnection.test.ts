@@ -154,6 +154,109 @@ describe("SyncConnection", () => {
     });
   });
 
+  // ── Stale packet handling ─────────────────────────────────────────────────
+
+  describe("replay/stale packets (syncId <= lastSyncId)", () => {
+    beforeEach(async () => {
+      const baseline = await db.loadMeta();
+      baseline!.lastSyncId = 50;
+      await db.saveMeta(baseline!);
+    });
+
+    it("does not apply syncActions to the in-memory pool", async () => {
+      const existing = new TestTask();
+      existing.hydrate({ id: "t1", title: "Newer state" });
+      existing.makeModelObservable();
+      pool.put("TestTask", existing);
+
+      await process(conn, {
+        syncId: 10,
+        syncActions: [
+          {
+            action: "U",
+            modelName: "TestTask",
+            modelId: "t1",
+            data: { title: "Older state — would clobber" },
+          },
+        ],
+      });
+
+      expect(existing.title).toBe("Newer state");
+    });
+
+    it("does not write stale syncActions to IndexedDB", async () => {
+      await db.writeModels("TestTask", [{ id: "t1", title: "Newer" }]);
+
+      await process(conn, {
+        syncId: 10,
+        syncActions: [
+          {
+            action: "U",
+            modelName: "TestTask",
+            modelId: "t1",
+            data: { title: "Older — would clobber" },
+          },
+        ],
+      });
+
+      const record = await db.readModel("TestTask", "t1");
+      expect(record!.title).toBe("Newer");
+    });
+
+    it("still processes sync-group changes on a stale packet", async () => {
+      const onSyncGroupsChanged = vi.fn().mockResolvedValue(undefined);
+      const c = new SyncConnection(
+        "http://localhost/events",
+        db,
+        pool,
+        queue,
+        undefined,
+        onSyncGroupsChanged,
+      );
+
+      await process(c, {
+        syncId: 10,
+        syncActions: [],
+        addedSyncGroups: ["team-new"],
+      });
+
+      expect(onSyncGroupsChanged).toHaveBeenCalledWith(["team-new"], []);
+      const meta = await db.loadMeta();
+      expect(meta!.subscribedSyncGroups).toContain("team-new");
+      expect(meta!.lastSyncId).toBe(50); // not advanced
+      c.disconnect();
+    });
+
+    it("still fires onPacket and resolveBySync on a stale packet", async () => {
+      const resolveSpy = vi.spyOn(queue, "resolveBySync");
+      const onPacket = vi.fn();
+      const c = new SyncConnection(
+        "http://localhost/events",
+        db,
+        pool,
+        queue,
+        onPacket,
+      );
+
+      const stalePacket: DeltaPacket = {
+        syncId: 10,
+        syncActions: [
+          {
+            action: "I",
+            modelName: "TestTask",
+            modelId: "t-stale",
+            data: { title: "ignored" },
+          },
+        ],
+      };
+      await process(c, stalePacket);
+
+      expect(resolveSpy).toHaveBeenCalledWith(10);
+      expect(onPacket).toHaveBeenCalledWith(stalePacket);
+      c.disconnect();
+    });
+  });
+
   // ── Update action (U) ──────────────────────────────────────────────────────
 
   describe("action: U (update)", () => {
