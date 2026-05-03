@@ -33,7 +33,25 @@ import type { RefCollection } from "@sync-engine/LazyCollection";
 import type { OwnedRefs } from "@sync-engine/LazyOwnedCollection";
 const dateSerializer = (v: Date) => (v instanceof Date ? v.toISOString() : v);
 const dateDeserializer = (v: unknown) => new Date(v as string);
+import { reaction } from "mobx";
 import type { StoreManager } from "@sync-engine/StoreManager";
+import type { IObjectPool } from "@sync-engine/types";
+
+/**
+ * Run `expr` reactively, recording every value it emits (including the initial
+ * read). Returns the array and a dispose function. Replaces the
+ * reaction-with-observed-array boilerplate sprinkled across reactivity tests.
+ */
+export function observe<T>(expr: () => T): {
+  observed: T[];
+  dispose: () => void;
+} {
+  const observed: T[] = [];
+  const dispose = reaction(expr, (v) => observed.push(v), {
+    fireImmediately: true,
+  });
+  return { observed, dispose };
+}
 
 /** Hydrate, make observable, and register a model in the given StoreManager's pool. */
 export function addToPool(
@@ -46,23 +64,31 @@ export function addToPool(
 }
 
 /**
+ * No-op IObjectPool with optional overrides. Use anywhere a test needs to
+ * satisfy `BaseModel.store` without booting a real StoreManager.
+ */
+export function makeFakePool(overrides: Partial<IObjectPool> = {}): IObjectPool {
+  return {
+    getById: () => undefined,
+    put: () => {},
+    notifyReferenceChange: () => {},
+    trackModel: () => {},
+    ...overrides,
+  };
+}
+
+/**
  * Hydrate a model, make it observable, and set a fake store on it —
  * the minimal setup for testing an existing pool model without a real StoreManager.
  */
 export function hydrateObservable(
   model: BaseModel,
   data: Record<string, unknown>,
-  store: {
-    getById: (...args: unknown[]) => unknown;
-    put: (...args: unknown[]) => void;
-  } = {
-    getById: () => undefined,
-    put: () => {},
-  },
+  store: IObjectPool = makeFakePool(),
 ) {
   model.hydrate(data);
   model.makeModelObservable();
-  model.store = store as Parameters<typeof addToPool>[0]["objectPool"];
+  model.store = store;
 }
 
 type FakeStoreManagerOverrides = {
@@ -82,7 +108,7 @@ export function makeFakeStoreManager(
   overrides: FakeStoreManagerOverrides = {},
 ): StoreManager {
   return {
-    objectPool: { getById: () => undefined, put: () => {} },
+    objectPool: makeFakePool(),
     commitCreate: overrides.commitCreate ?? (() => {}),
     commitUpdate: overrides.commitUpdate ?? (() => {}),
     loadCollection: async () => [],

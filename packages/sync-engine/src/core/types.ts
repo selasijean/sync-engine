@@ -114,6 +114,26 @@ export interface PropertyChange {
 export interface IObjectPool {
   getById(modelName: string, id: string): BaseModel | undefined;
   put(modelName: string, instance: BaseModel): void;
+  /**
+   * Notify the pool that a child's foreign-key property changed so it can
+   * detach from the old parent's RefCollection / BackRef and attach to the
+   * new one. Called by BaseModel from `propertyChanged` and from `hydrate`
+   * when an in-pool model receives a delta-driven box update.
+   */
+  notifyReferenceChange(
+    child: BaseModel,
+    childModelName: string,
+    fkName: string,
+    oldId: string | null,
+    newId: string | null,
+  ): void;
+  /**
+   * Register a tracked MobX dependency on the pool entry for `(modelName, id)`.
+   * The pool fires the corresponding atom on insert / removal / identity swap,
+   * so observers reading the entry through `@Reference` re-evaluate even when
+   * the holder's foreign key didn't change.
+   */
+  trackModel(modelName: string, id: string): void;
 }
 
 /** Store manager interface as seen from BaseModel. Avoids importing StoreManager directly. */

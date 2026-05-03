@@ -15,10 +15,11 @@
  *   When a model is deleted, find all BackReferences pointing to it and
  *   remove those "owned" models too. Also handle onDelete: "cascade" on References.
  *
- * Collection invalidation:
- *   When models are inserted, deleted, or moved between parents, the
- *   affected RefCollections are invalidated so they re-query
- *   the pool on next access.
+ * Inverse-link maintenance:
+ *   The ObjectPool keeps parent RefCollections / BackRefs in sync with the
+ *   pool automatically — `pool.put` attaches and `pool.remove` detaches, and
+ *   `BaseModel.hydrate` dispatches FK changes for in-pool models. SyncConnection
+ *   only has to mutate the pool; parent collections track changes themselves.
  */
 
 import type { StorageAdapter } from "./Database";
@@ -236,7 +237,6 @@ export class SyncConnection extends BaseSSEConnection {
           });
         }
         this.queue.rebaseAll(action.modelId, action.modelName, action.data);
-        this.invalidateAffectedCollections(action.modelName, action.data);
         break;
       }
 
@@ -248,24 +248,9 @@ export class SyncConnection extends BaseSSEConnection {
         }
         const model = this.pool.getById(action.modelName, action.modelId);
         if (model != null) {
-          // Capture old reference values to detect parent changes
-          const oldRefs: Record<string, unknown> = {};
-          for (const k of Object.keys(action.data)) {
-            if (k !== "id") {
-              oldRefs[k] = (model as unknown as Record<string, unknown>)[k];
-            }
-          }
           model.hydrate(action.data);
           this.pool.put(action.modelName, model);
           this.queue.rebaseAll(action.modelId, action.modelName, action.data);
-
-          // If any reference IDs changed (e.g. issue moved teams),
-          // invalidate both old and new parent collections
-          this.invalidateOnReferenceChange(
-            action.modelName,
-            oldRefs,
-            action.data,
-          );
         }
         break;
       }
@@ -274,9 +259,7 @@ export class SyncConnection extends BaseSSEConnection {
       case "A": {
         // Cascade delete: remove BackReference-owned models
         this.cascadeDelete(action.modelName, action.modelId);
-        // Invalidate parent collections before removing
-        this.invalidateCollectionsForModel(action.modelName, action.modelId);
-        // Remove from pool
+        // Pool.remove detaches the model from any parent RefCollections / BackRefs
         this.pool.remove(action.modelName, action.modelId);
         break;
       }
@@ -387,155 +370,4 @@ export class SyncConnection extends BaseSSEConnection {
     }
   }
 
-  // =========================================================================
-  // Collection invalidation
-  //
-  // Instead of manually adding/removing items from RefCollections,
-  // we invalidate the affected ones. On next access, they re-query the pool.
-  // The ObjectPool.notify() on put/remove already triggers React re-renders.
-  // =========================================================================
-
-  /**
-   * After an insert: invalidate collections on the parent model.
-   * e.g. new Issue with teamId "t-eng" → invalidate Team("t-eng").issues
-   */
-  private invalidateAffectedCollections(
-    modelName: string,
-    data: Record<string, unknown>,
-  ) {
-    const modelMeta = ModelRegistry.getModelMeta(modelName);
-    if (modelMeta == null) {
-      return;
-    }
-
-    for (const [propName, propMeta] of modelMeta.properties) {
-      if (propMeta.type !== PropertyType.Reference) {
-        continue;
-      }
-      if (propMeta.referenceTo == null) {
-        continue;
-      }
-
-      const parentId = data[propName]; // e.g. data.teamId
-      if (parentId == null) {
-        continue;
-      }
-
-      this.invalidateCollectionsOnParent(
-        propMeta.referenceTo,
-        parentId as string,
-        modelName,
-      );
-    }
-  }
-
-  /**
-   * After a reference ID change: invalidate both old and new parent collections.
-   * e.g. issue moved from team A to team B → invalidate teamA.issues AND teamB.issues
-   */
-  private invalidateOnReferenceChange(
-    modelName: string,
-    oldValues: Record<string, unknown>,
-    newValues: Record<string, unknown>,
-  ) {
-    const modelMeta = ModelRegistry.getModelMeta(modelName);
-    if (modelMeta == null) {
-      return;
-    }
-
-    for (const [propName, propMeta] of modelMeta.properties) {
-      if (
-        propMeta.type !== PropertyType.Reference ||
-        propMeta.referenceTo == null
-      ) {
-        continue;
-      }
-      const oldId = oldValues[propName];
-      const newId = newValues[propName];
-      if (oldId === newId || newId === undefined) {
-        continue;
-      }
-
-      if (oldId != null) {
-        this.invalidateCollectionsOnParent(
-          propMeta.referenceTo,
-          oldId as string,
-          modelName,
-        );
-      }
-      if (newId != null) {
-        this.invalidateCollectionsOnParent(
-          propMeta.referenceTo,
-          newId as string,
-          modelName,
-        );
-      }
-    }
-  }
-
-  /** Before deleting a model, invalidate its parent's collections. */
-  private invalidateCollectionsForModel(modelName: string, modelId: string) {
-    const model = this.pool.getById(modelName, modelId);
-    if (model == null) {
-      return;
-    }
-    const modelMeta = ModelRegistry.getMetaForInstance(model);
-    if (modelMeta == null) {
-      return;
-    }
-
-    for (const [propName, propMeta] of modelMeta.properties) {
-      if (
-        propMeta.type !== PropertyType.Reference ||
-        propMeta.referenceTo == null
-      ) {
-        continue;
-      }
-      const parentId = (model as unknown as Record<string, unknown>)[propName];
-      if (parentId != null) {
-        this.invalidateCollectionsOnParent(
-          propMeta.referenceTo,
-          parentId as string,
-          modelName,
-        );
-      }
-    }
-  }
-
-  /** Find the RefCollections on a parent model and invalidate them. */
-  private invalidateCollectionsOnParent(
-    parentModelName: string,
-    parentId: string,
-    childModelName: string,
-  ) {
-    const parent = this.pool.getById(parentModelName, parentId);
-    if (parent == null) {
-      return;
-    }
-
-    const parentMeta = ModelRegistry.getMetaForInstance(parent);
-    if (parentMeta == null) {
-      return;
-    }
-
-    for (const [propName, propMeta] of parentMeta.properties) {
-      if (
-        propMeta.type === PropertyType.ReferenceCollection &&
-        propMeta.referenceTo === childModelName
-      ) {
-        const collection =
-          (parent as unknown as Record<string, unknown>).__collections != null
-            ? (
-                parent.__collections as Record<
-                  string,
-                  { invalidate?: () => void }
-                >
-              )[propName]
-            : undefined;
-        if (collection?.invalidate != null) {
-          collection.invalidate();
-        }
-      }
-    }
-  }
 }

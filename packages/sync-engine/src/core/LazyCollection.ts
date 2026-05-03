@@ -110,6 +110,47 @@ export abstract class LazyCollectionBase<T extends BaseModel = BaseModel> {
     return this.load();
   }
 
+  /**
+   * Splice an instance into items reactively. Idempotent — duplicates by id are
+   * skipped. Called by the ObjectPool when a child enters the pool with a
+   * matching foreign key, or moves into this parent.
+   */
+  attach(item: T) {
+    if (this.items.some((existing) => existing.id === item.id)) {
+      return;
+    }
+    runInAction(() => {
+      this.items = [...this.items, item];
+    });
+    this.notifyListeners();
+  }
+
+  /**
+   * Remove an instance from items reactively. No-op if missing. Called by the
+   * ObjectPool when a child is removed from the pool, or moves to a different
+   * parent.
+   */
+  detach(itemId: string) {
+    if (!this.items.some((existing) => existing.id === itemId)) {
+      return;
+    }
+    runInAction(() => {
+      this.items = this.items.filter((existing) => existing.id !== itemId);
+    });
+    this.notifyListeners();
+  }
+
+  /**
+   * Replace items wholesale. Used by the ObjectPool to backfill when a parent
+   * enters the pool after children were already present.
+   */
+  setItems(items: T[]) {
+    runInAction(() => {
+      this.items = items;
+    });
+    this.notifyListeners();
+  }
+
   get isLoaded() {
     return this.state === CollectionState.Loaded;
   }
@@ -203,18 +244,20 @@ export class RefCollection<
     });
 
     try {
-      const results =
-        this.loader != null
-          ? await this.loader(this.referencedModelName, this.partialIndexValues)
-          : [];
+      // The loader hydrates records into the ObjectPool, which synchronously
+      // dispatches attach() back into this collection. By the time the loader
+      // resolves, items already reflects every record the loader produced (plus
+      // anything else in the pool with a matching foreign key).
+      if (this.loader != null) {
+        await this.loader(this.referencedModelName, this.partialIndexValues);
+      }
 
       runInAction(() => {
-        this.items = results;
         this.state = CollectionState.Loaded;
       });
 
       this.notifyListeners();
-      return results;
+      return [...this.items] as T[];
     } catch (err) {
       runInAction(() => {
         this.error = err as Error;
@@ -336,6 +379,32 @@ export class BackRef<T extends BaseModel = BaseModel> {
         this.state = CollectionState.Idle;
       });
     }
+  }
+
+  /**
+   * Set the resolved value reactively. Used by the ObjectPool when a model
+   * matching this back-reference enters the pool. Idempotent on identity.
+   */
+  attach(item: T) {
+    if (this.value === item) {
+      return;
+    }
+    runInAction(() => {
+      this.value = item;
+    });
+  }
+
+  /**
+   * Clear the resolved value reactively. Used by the ObjectPool when the
+   * referenced model leaves the pool or its inverse key changes.
+   */
+  detach(itemId: string) {
+    if (this.value == null || this.value.id !== itemId) {
+      return;
+    }
+    runInAction(() => {
+      this.value = null;
+    });
   }
 
   get isLoaded() {

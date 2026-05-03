@@ -4,6 +4,7 @@ import {
   TestTask,
   TestProject,
   hydrateObservable,
+  makeFakePool,
   makeFakeStoreManager,
 } from "./fixtures";
 
@@ -98,7 +99,7 @@ describe("BaseModel", () => {
       const task = new TestTask();
       task.hydrate({ id: "t", title: "Original" });
       task.makeModelObservable();
-      task.store = { getById: () => undefined, put: () => {} };
+      task.store = makeFakePool();
       task.title = "Middle";
       task.title = "Final";
       // save() returns {oldValue: 'Original', newValue: 'Final'}
@@ -122,7 +123,7 @@ describe("BaseModel", () => {
 
   describe("save()", () => {
     // Wire a minimal fake store so save() takes the update path, not the create path.
-    const fakeStore = { getById: () => undefined, put: () => {} };
+    const fakeStore = makeFakePool();
 
     it("returns the change map and clears pending changes", () => {
       const task = new TestTask();
@@ -414,10 +415,7 @@ describe("BaseModel", () => {
       task.makeModelObservable();
 
       // Simulate pool being wired as the store
-      const fakeStore = {
-        getById: (_name: string, _id: string) => project,
-        put: () => {},
-      };
+      const fakeStore = makeFakePool({ getById: () => project });
       task.store = fakeStore;
 
       expect(task.project).toBe(project);

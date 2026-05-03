@@ -18,7 +18,24 @@
 
 import { ModelRegistry } from "./ModelRegistry";
 import { defineObservableProperty } from "./observability";
-import { PropertyType, LoadStrategy } from "./types";
+import { PropertyType, LoadStrategy, type IObjectPool } from "./types";
+import type { LazyCollectionBase, BackRef } from "./LazyCollection";
+
+// `this`-binding shapes used by the runtime accessors below. Kept narrow so
+// decorators.ts doesn't need to import BaseModel (which would create a cycle).
+
+interface RefHolder {
+  store: IObjectPool | null;
+  [key: string]: unknown;
+}
+
+interface CollectionHolder {
+  __collections?: Record<string, LazyCollectionBase>;
+}
+
+interface BackRefHolder {
+  __backRefs?: Record<string, BackRef>;
+}
 
 // Helper: ensure a model is registered before attaching properties to it.
 // Legacy decorator target — no better type exists for prototype manipulation
@@ -167,17 +184,19 @@ function defineReference(
     Object.defineProperty(target, key, {
       configurable: true,
       enumerable: false,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      get(this: any) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const id = this[idKey] as any;
-        if (id == null || id === "") {
+      get(this: RefHolder) {
+        const id = this[idKey];
+        if (typeof id !== "string" || id === "") {
           return null;
         }
-        return this.store?.getById?.(referenceTo, id) ?? null;
+        // Register a tracked dependency on the pool entry so MobX observers
+        // re-run when the target is removed or its pool slot is replaced — not
+        // just when the FK changes. Closes the gap where a deletion or in-place
+        // identity swap would leave observers reading a stale value.
+        this.store?.trackModel(referenceTo, id);
+        return this.store?.getById(referenceTo, id) ?? null;
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      set(this: any, model: any) {
+      set(this: RefHolder, model: { id: string } | null) {
         this[idKey] = model != null ? model.id : null;
       },
     });
@@ -243,9 +262,7 @@ function defineReferenceCollection(
     Object.defineProperty(target, key, {
       configurable: true,
       enumerable: false,
-      // Legacy decorator target — no better type exists for prototype manipulation
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      get(this: any) {
+      get(this: CollectionHolder) {
         return this.__collections?.[key] ?? null;
       },
     });
@@ -292,9 +309,7 @@ export function BackReference(referenceTo: string, inverseOf: string) {
     Object.defineProperty(target, key, {
       configurable: true,
       enumerable: false,
-      // Legacy decorator target — no better type exists for prototype manipulation
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      get(this: any) {
+      get(this: BackRefHolder) {
         return this.__backRefs?.[key] ?? null;
       },
     });
@@ -362,8 +377,7 @@ function defineOwnedCollection(
     Object.defineProperty(target, key, {
       configurable: true,
       enumerable: false,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      get(this: any) {
+      get(this: CollectionHolder) {
         return this.__collections?.[key] ?? null;
       },
     });

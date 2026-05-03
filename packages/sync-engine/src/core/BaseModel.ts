@@ -113,8 +113,26 @@ export class BaseModel {
             this.__collections[collectionName]?.invalidate();
           }
         }
+        this.maintainParentLinks(meta.name, propName, oldValue, newValue);
       }
     }
+  }
+
+  /** Forward an FK change to the pool so it can re-route inverse links. No-op
+   * before the model has entered a pool. */
+  private maintainParentLinks(
+    modelName: string,
+    propName: string,
+    oldValue: unknown,
+    newValue: unknown,
+  ) {
+    const pool = this.store;
+    if (pool == null) {
+      return;
+    }
+    const oldId = typeof oldValue === "string" ? oldValue : null;
+    const newId = typeof newValue === "string" ? newValue : null;
+    pool.notifyReferenceChange(this, modelName, propName, oldId, newId);
   }
 
   // ---------------------------------------------------------------------------
@@ -461,38 +479,47 @@ export class BaseModel {
   hydrate(data: Record<string, unknown>) {
     const meta = ModelRegistry.getMetaForInstance(this);
 
-    for (const [key, value] of Object.entries(data)) {
-      if (key === "id") {
-        this.id = value as string;
-        continue;
-      }
-      const propMeta = meta?.properties.get(key);
+    // Wrap multi-field updates in a single MobX action so observers see one
+    // coherent transition for SSE deltas that touch many fields at once.
+    runInAction(() => {
+      for (const [key, value] of Object.entries(data)) {
+        if (key === "id") {
+          this.id = value as string;
+          continue;
+        }
+        const propMeta = meta?.properties.get(key);
 
-      // Recursive hydration: if a ReferenceModel property has an embedded object,
-      // create a model instance from it and put it in the pool.
-      if (
-        propMeta?.type === PropertyType.ReferenceModel &&
-        value &&
-        typeof value === "object" &&
-        "id" in value
-      ) {
-        const nested = value as Record<string, unknown>;
-        this.hydrateNestedModel(propMeta.referenceTo!, nested);
-        const idKey = propMeta.idField ?? key + "Id";
-        (this as Record<string, unknown>)[`__raw_${idKey}`] = nested.id;
-        continue;
-      }
+        // Recursive hydration: if a ReferenceModel property has an embedded object,
+        // create a model instance from it and put it in the pool.
+        if (
+          propMeta?.type === PropertyType.ReferenceModel &&
+          value &&
+          typeof value === "object" &&
+          "id" in value
+        ) {
+          const nested = value as Record<string, unknown>;
+          this.hydrateNestedModel(propMeta.referenceTo!, nested);
+          const idKey = propMeta.idField ?? key + "Id";
+          (this as Record<string, unknown>)[`__raw_${idKey}`] = nested.id;
+          continue;
+        }
 
-      const deserialized =
-        propMeta?.deserializer != null ? propMeta.deserializer(value) : value;
-      (this as Record<string, unknown>)[`__raw_${key}`] = deserialized;
-      // If the model is already observable, update the MobX box directly so
-      // hydrate() is safe to call on live pool models (e.g. from SyncConnection).
-      const box = this.__mobx[key];
-      if (box != null) {
-        box.set(deserialized);
+        const deserialized =
+          propMeta?.deserializer != null ? propMeta.deserializer(value) : value;
+        const oldRawValue = (this as Record<string, unknown>)[`__raw_${key}`];
+        (this as Record<string, unknown>)[`__raw_${key}`] = deserialized;
+        const box = this.__mobx[key];
+        if (box != null) {
+          box.set(deserialized);
+        }
+        // box.set bypasses the prototype setter, so propertyChanged never fires
+        // for delta-driven hydrates. Dispatch parent-link maintenance directly
+        // so SSE-driven FK changes still wake the inverse RefCollection / BackRef.
+        if (this.store != null && meta != null) {
+          this.maintainParentLinks(meta.name, key, oldRawValue, deserialized);
+        }
       }
-    }
+    });
   }
 
   private hydrateNestedModel(modelName: string, data: Record<string, unknown>) {
